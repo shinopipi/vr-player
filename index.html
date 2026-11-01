@@ -103,7 +103,7 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border-radius:50%;bac
 
 <div id="ui" class="compact">
   <header class="top">
-    <div class="brand">ゴーグル3Dプレーヤー <span style="font-size:11px;color:var(--muted);font-weight:500">ver 2.6</span><small id="fname">デモ映像を表示中</small></div>
+    <div class="brand">ゴーグル3Dプレーヤー <span style="font-size:11px;color:var(--muted);font-weight:500">ver 2.7</span><small id="fname">デモ映像を表示中</small></div>
     <label class="btn primary" for="file">動画を選ぶ</label>
     <input class="vh" type="file" id="file" accept="video/mp4,.mp4,.m4v,.mov,video/*" multiple>
   </header>
@@ -362,9 +362,26 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border-radius:50%;bac
     }
     tv.removeAttribute('src');tv.load();
   }
+  // when served from the home PC, read the video folder listing (videos/) automatically
+  (async function loadServerList(){
+    if(/github\.io$|claude|anthropic/.test(location.hostname))return;
+    try{
+      const r=await fetch('videos/',{cache:'no-store'});if(!r.ok)return;
+      const html=await r.text();const doc=new DOMParser().parseFromString(html,'text/html');
+      const base=new URL('videos/',location.href);const seen=new Set();const items=[];
+      doc.querySelectorAll('a[href]').forEach(a=>{
+        const u=new URL(a.getAttribute('href'),base);const name=decodeURIComponent(u.pathname.split('/').pop()||'');
+        if(/\.(mp4|m4v|mov)$/i.test(name)&&!seen.has(u.href)){seen.add(u.href);items.push({name,url:u.href,thumb:null,remote:true})}
+      });
+      if(!items.length){toast('パソコンの動画フォルダが空です',4000);return}
+      items.sort((a,b)=>a.name.localeCompare(b.name,'ja'));
+      lib=items;loadVideo(0,false);thumbGen++;makeThumbs(thumbGen);
+      toast(`パソコンの動画 ${items.length}本を読み込みました`,4000);
+    }catch(e){}
+  })();
   $('file').addEventListener('change',e=>{
     const fs=Array.from((e.target.files)||[]);if(!fs.length)return;
-    lib.forEach(it=>URL.revokeObjectURL(it.url));
+    lib.forEach(it=>{if(!it.remote)URL.revokeObjectURL(it.url)});
     lib=fs.map(f=>({name:f.name,url:URL.createObjectURL(f),thumb:null}));
     loadVideo(0,false);
     thumbGen++;makeThumbs(thumbGen);
