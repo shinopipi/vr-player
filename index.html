@@ -100,7 +100,7 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border-radius:50%;bac
 
 <div id="ui">
   <header class="top">
-    <div class="brand">ゴーグル3Dプレーヤー <span style="font-size:11px;color:var(--muted);font-weight:500">ver 1.8</span><small id="fname">デモ映像を表示中</small></div>
+    <div class="brand">ゴーグル3Dプレーヤー <span style="font-size:11px;color:var(--muted);font-weight:500">ver 1.9</span><small id="fname">デモ映像を表示中</small></div>
     <label class="btn primary" for="file">動画を選ぶ</label>
     <input class="vh" type="file" id="file" accept="video/mp4,.mp4,.m4v,.mov,video/*" multiple>
   </header>
@@ -157,7 +157,7 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border-radius:50%;bac
 (function(){
   const $=id=>document.getElementById(id);
   const cv=$('stage'), v=$('vid'), ui=$('ui');
-  const S={proj:'eq180',lay:'sbs',fov:100,ipd:0,swap:false,divider:true,loop:false,waudio:true};
+  const S={proj:'eq180',lay:'sbs',fov:100,ipd:0,swap:false,divider:true,loop:false,waudio:true,vol:1};
   try{Object.assign(S,JSON.parse(localStorage.getItem('goggle3d.v2')||'{}'))}catch(e){}
   const save=()=>{try{localStorage.setItem('goggle3d.v2',JSON.stringify(S))}catch(e){}};
 
@@ -309,11 +309,13 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border-radius:50%;bac
   ['swap','divider','loop'].forEach(k=>$(k).addEventListener('change',e=>{S[k]=e.target.checked;syncUI();save()}));
   $('waudio').addEventListener('change',e=>{S.waudio=e.target.checked;syncUI();save();toast('アプリを開き直すと切り替わります',4000)});
   // route sound through Web Audio so iOS is less likely to show the Now Playing activity
-  let actx=null,srcNode=null;
+  let actx=null,srcNode=null,gainNode=null;
+  function applyVol(){if(gainNode)gainNode.gain.value=S.vol;try{v.volume=S.vol}catch(e){}}
+  applyVol();
   function audioUnlock(){
     if(!S.waudio)return;
     try{
-      if(!srcNode){const AC=window.AudioContext||window.webkitAudioContext;if(!AC)return;actx=new AC();srcNode=actx.createMediaElementSource(v);srcNode.connect(actx.destination)}
+      if(!srcNode){const AC=window.AudioContext||window.webkitAudioContext;if(!AC)return;actx=new AC();srcNode=actx.createMediaElementSource(v);gainNode=actx.createGain();gainNode.gain.value=S.vol;srcNode.connect(gainNode);gainNode.connect(actx.destination)}
       if(actx.state!=='running')actx.resume().catch(()=>{});
     }catch(e){}
   }
@@ -411,9 +413,10 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border-radius:50%;bac
   }
   const BY=420;
   const REG=[
-    {id:'zminus',cx:70,cy:100,r:34,cont:true},{id:'zplus',cx:470,cy:100,r:34,cont:true},
-    {id:'iminus',cx:620,cy:100,r:34,cont:true},{id:'iplus',cx:960,cy:100,r:34,cont:true},
-    {id:'close',cx:1120,cy:100,r:38},
+    {id:'zminus',cx:60,cy:100,r:32,cont:true},{id:'zplus',cx:330,cy:100,r:32,cont:true},
+    {id:'iminus',cx:410,cy:100,r:32,cont:true},{id:'iplus',cx:680,cy:100,r:32,cont:true},
+    {id:'vminus',cx:760,cy:100,r:32,cont:true},{id:'vplus',cx:1030,cy:100,r:32,cont:true},
+    {id:'close',cx:1140,cy:100,r:36},
     {id:'seek',x:60,y:215,w:1080,h:70},
     {id:'recenter',cx:140,cy:BY,r:56},{id:'back',cx:320,cy:BY,r:56},{id:'play',cx:500,cy:BY,r:72},
     {id:'fwd',cx:680,cy:BY,r:56},{id:'swap',cx:860,cy:BY,r:56},{id:'list',cx:1040,cy:BY,r:56}];
@@ -460,6 +463,8 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border-radius:50%;bac
       case'zplus':S.fov=Math.max(60,S.fov-2);break;
       case'iminus':S.ipd=Math.max(-60,S.ipd-1);break;
       case'iplus':S.ipd=Math.min(60,S.ipd+1);break;
+      case'vminus':S.vol=Math.max(0,Math.round((S.vol-0.05)*100)/100);applyVol();break;
+      case'vplus':S.vol=Math.min(1,Math.round((S.vol+0.05)*100)/100);applyVol();break;
     }
     syncUI();save();
   }
@@ -503,6 +508,8 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border-radius:50%;bac
       case'zplus':mag();ln(-r*0.28,-r*0.1,r*0.08,-r*0.1);ln(-r*0.1,-r*0.28,-r*0.1,r*0.08);break;
       case'iminus':ln(-r*0.3,0,r*0.3,0);break;
       case'iplus':ln(-r*0.3,0,r*0.3,0);ln(0,-r*0.3,0,r*0.3);break;
+      case'vminus':case'vplus':{c.beginPath();c.moveTo(-r*0.42,-r*0.14);c.lineTo(-r*0.24,-r*0.14);c.lineTo(-r*0.04,-r*0.34);c.lineTo(-r*0.04,r*0.34);c.lineTo(-r*0.24,r*0.14);c.lineTo(-r*0.42,r*0.14);c.closePath();c.fill();
+        c.beginPath();c.arc(r*0.02,0,r*0.2,-0.9,0.9);c.stroke();if(id==='vplus'){c.beginPath();c.arc(r*0.02,0,r*0.38,-0.9,0.9);c.stroke()}break}
       case'close':ln(-r*0.35,-r*0.35,r*0.35,r*0.35);ln(r*0.35,-r*0.35,-r*0.35,r*0.35);break;
       case'recenter':{const a=r*0.42,b=r*0.16;[[-1,-1],[1,-1],[-1,1],[1,1]].forEach(([sx,sy])=>{c.beginPath();c.moveTo(sx*a,sy*(a-b));c.lineTo(sx*a,sy*a);c.lineTo(sx*(a-b),sy*a);c.stroke()});c.beginPath();c.arc(0,0,r*0.15,0,Math.PI*2);c.stroke();break}
       case'back':tri(-r*0.16,-1,r*0.17);tri(r*0.18,-1,r*0.17);break;
@@ -554,8 +561,8 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border-radius:50%;bac
     // zoom & eye-distance sliders
     const bar=(l,r_,f)=>{rr(c,l,94,r_-l,12,6);c.fillStyle=TRACK;c.fill();rr(c,l,94,(r_-l)*clamp01(f),12,6);c.fillStyle=ACC;c.fill();c.beginPath();c.arc(l+(r_-l)*clamp01(f),100,13,0,Math.PI*2);c.fillStyle=FG;c.fill()};
     c.fillStyle=MUTED;c.font=`500 24px ${JP}`;c.textAlign='center';
-    c.fillText('ズーム',270,52);c.fillText('目の間隔 '+(S.ipd>0?'+':'')+S.ipd,790,52);
-    bar(120,420,(130-S.fov)/70);bar(670,910,(S.ipd+60)/120);
+    c.fillText('ズーム',195,52);c.fillText('目の間隔 '+(S.ipd>0?'+':'')+S.ipd,545,52);c.fillText('音量 '+Math.round(S.vol*100),895,52);
+    bar(105,285,(130-S.fov)/70);bar(455,635,(S.ipd+60)/120);bar(805,985,S.vol);
     for(const g of REG){
       if(g.w)continue;
       const hov=hoverId===g.id;
