@@ -103,7 +103,7 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border-radius:50%;bac
 
 <div id="ui" class="compact">
   <header class="top">
-    <div class="brand">ゴーグル3Dプレーヤー <span style="font-size:11px;color:var(--muted);font-weight:500">ver 3.7</span><small id="fname">デモ映像を表示中</small></div>
+    <div class="brand">ゴーグル3Dプレーヤー <span style="font-size:11px;color:var(--muted);font-weight:500">ver 3.8</span><small id="fname">デモ映像を表示中</small></div>
     <label class="btn primary" for="file">動画を選ぶ</label>
     <input class="vh" type="file" id="file" accept="video/mp4,.mp4,.m4v,.mov,video/*" multiple>
   </header>
@@ -334,8 +334,18 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border-radius:50%;bac
     try{
       if(!srcNode){const AC=window.AudioContext||window.webkitAudioContext;if(!AC)return;actx=new AC();srcNode=actx.createMediaElementSource(v);gainNode=actx.createGain();gainNode.gain.value=S.vol;srcNode.connect(gainNode);gainNode.connect(actx.destination)}
       if(actx.state!=='running')actx.resume().catch(()=>{});
+      if(!actx._watch){actx._watch=1;actx.addEventListener('statechange',()=>{if(actx.state!=='running'&&!v.paused)actx.resume().catch(()=>{})})}
     }catch(e){}
   }
+  // iOS pauses the audio engine when the app is interrupted; any tap brings it back so the video doesn't freeze
+  document.addEventListener('pointerdown',()=>{if(srcNode&&actx&&actx.state!=='running')actx.resume().catch(()=>{})},true);
+  document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'&&actx&&actx.state!=='running')actx.resume().catch(()=>{})});
+  // watchdog: playing but time not moving -> try to recover
+  {let lastT=-1,stuck=0;setInterval(()=>{
+    if(!hasVideo||v.paused||v.seeking){stuck=0;lastT=v.currentTime;return}
+    if(v.currentTime===lastT&&v.readyState>=3){stuck++;if(stuck===2){if(actx&&actx.state!=='running')actx.resume().catch(()=>{});v.play().catch(()=>{});toast('再生が止まったため再開しています。動かない場合は画面をタップしてください',4000)}}
+    else stuck=0;lastT=v.currentTime;
+  },1500)}
   try{if('mediaSession' in navigator){navigator.mediaSession.metadata=null}}catch(e){}
 
   let hideTimer=null;
@@ -350,7 +360,7 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border-radius:50%;bac
     curIdx=i;if(it.cloud)v.crossOrigin='anonymous';else v.removeAttribute('crossorigin');v.preload=it.cloud?'metadata':'auto';v.src=it.url;v.load();hasVideo=true;
     $('fname').textContent=it.name+(lib.length>1?`（${i+1}/${lib.length}）`:'');
     v.addEventListener('loadeddata',()=>{if(!autoplay){try{v.currentTime=0.01}catch(_){}}},{once:true});
-    if(autoplay){v.muted=false;v.play().catch(()=>{if(typeof flash==='function')flash('画面をタップして再生してください')})}
+    if(autoplay){audioUnlock();v.muted=false;v.play().catch(()=>{if(typeof flash==='function')flash('画面をタップして再生してください')})}
   }
   v.addEventListener('error',async()=>{
     if(!hasVideo)return;
@@ -560,7 +570,7 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border-radius:50%;bac
       case'back':case'fwd':
         if(!hasVideo){flash('動画が選ばれていません');return}
         v.currentTime=Math.max(0,Math.min((v.duration||0)-0.5,v.currentTime+(id==='fwd'?10:-10)));return;
-      case'play':
+      case'play':audioUnlock();
         if(!hasVideo){flash('動画が選ばれていません');return}
         if(v.paused)v.play().catch(()=>flash('画面をタップして再生してください'));else v.pause();return;
       case'seek':
