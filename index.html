@@ -100,7 +100,7 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border-radius:50%;bac
 
 <div id="ui">
   <header class="top">
-    <div class="brand">ゴーグル3Dプレーヤー <span style="font-size:11px;color:var(--muted);font-weight:500">ver 1.9</span><small id="fname">デモ映像を表示中</small></div>
+    <div class="brand">ゴーグル3Dプレーヤー <span style="font-size:11px;color:var(--muted);font-weight:500">ver 2.0</span><small id="fname">デモ映像を表示中</small></div>
     <label class="btn primary" for="file">動画を選ぶ</label>
     <input class="vh" type="file" id="file" accept="video/mp4,.mp4,.m4v,.mov,video/*" multiple>
   </header>
@@ -417,6 +417,7 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border-radius:50%;bac
     {id:'iminus',cx:410,cy:100,r:32,cont:true},{id:'iplus',cx:680,cy:100,r:32,cont:true},
     {id:'vminus',cx:760,cy:100,r:32,cont:true},{id:'vplus',cx:1030,cy:100,r:32,cont:true},
     {id:'close',cx:1140,cy:100,r:36},
+    {id:'zbar',x:100,y:70,w:190,h:60,slide:true},{id:'ibar',x:450,y:70,w:190,h:60,slide:true},{id:'vbar',x:800,y:70,w:190,h:60,slide:true},
     {id:'seek',x:60,y:215,w:1080,h:70},
     {id:'recenter',cx:140,cy:BY,r:56},{id:'back',cx:320,cy:BY,r:56},{id:'play',cx:500,cy:BY,r:72},
     {id:'fwd',cx:680,cy:BY,r:56},{id:'swap',cx:860,cy:BY,r:56},{id:'list',cx:1040,cy:BY,r:56}];
@@ -463,6 +464,9 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border-radius:50%;bac
       case'zplus':S.fov=Math.max(60,S.fov-2);break;
       case'iminus':S.ipd=Math.max(-60,S.ipd-1);break;
       case'iplus':S.ipd=Math.min(60,S.ipd+1);break;
+      case'zbar':S.fov=Math.round(130-seekFrac*70);break;
+      case'ibar':S.ipd=Math.round(seekFrac*120-60);break;
+      case'vbar':S.vol=Math.round(seekFrac*20)/20;applyVol();break;
       case'vminus':S.vol=Math.max(0,Math.round((S.vol-0.05)*100)/100);applyVol();break;
       case'vplus':S.vol=Math.min(1,Math.round((S.vol+0.05)*100)/100);applyVol();break;
     }
@@ -481,10 +485,10 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border-radius:50%;bac
     awayT=0;
     const reg=regionAt(gazeUV[0],gazeUV[1]);
     if(!reg){hoverId=null;hoverT=0;return}
-    if(reg.id==='seek'){
-      const f=clamp01((gazeUV[0]-reg.x)/reg.w);
-      if(hoverId!=='seek'||Math.abs(f-seekFrac)>0.015){hoverId='seek';seekFrac=f;hoverT=0}
-      hoverT+=dt;if(hoverT>=DWELL){act('seek');hoverT=0}
+    if(reg.id==='seek'||reg.slide){
+      const f=clamp01((gazeUV[0]-(reg.slide?reg.x+5:reg.x))/(reg.slide?reg.w-10:reg.w)),tol=reg.slide?0.04:0.015;
+      if(hoverId!==reg.id||Math.abs(f-seekFrac)>tol){hoverId=reg.id;seekFrac=f;hoverT=0}
+      hoverT+=dt;if(hoverT>=DWELL){act(reg.id);hoverT=0}
       return;
     }
     if(hoverId!==reg.id){hoverId=reg.id;hoverT=0;repeatT=0}
@@ -563,6 +567,10 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border-radius:50%;bac
     c.fillStyle=MUTED;c.font=`500 24px ${JP}`;c.textAlign='center';
     c.fillText('ズーム',195,52);c.fillText('目の間隔 '+(S.ipd>0?'+':'')+S.ipd,545,52);c.fillText('音量 '+Math.round(S.vol*100),895,52);
     bar(105,285,(130-S.fov)/70);bar(455,635,(S.ipd+60)/120);bar(805,985,S.vol);
+    {const sb={zbar:[105,285],ibar:[455,635],vbar:[805,985]}[hoverId];
+     if(sb){const x=sb[0]+(sb[1]-sb[0])*seekFrac;c.fillStyle=ACC;c.fillRect(x-3,80,6,40);ring(c,x,100,26,hoverT/DWELL);
+       const val=hoverId==='zbar'?Math.round(130-seekFrac*70)+'°':hoverId==='ibar'?((n=>(n>0?'+':'')+n)(Math.round(seekFrac*120-60))):String(Math.round(seekFrac*20)*5);
+       c.fillStyle=FG;c.font=`700 24px ${JP}`;c.textAlign='center';c.fillText(val,x,146);c.font=`500 24px ${JP}`;c.fillStyle=MUTED}}
     for(const g of REG){
       if(g.w)continue;
       const hov=hoverId===g.id;
