@@ -103,7 +103,7 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border-radius:50%;bac
 
 <div id="ui" class="compact">
   <header class="top">
-    <div class="brand">ゴーグル3Dプレーヤー <span style="font-size:11px;color:var(--muted);font-weight:500">ver 2.9</span><small id="fname">デモ映像を表示中</small></div>
+    <div class="brand">ゴーグル3Dプレーヤー <span style="font-size:11px;color:var(--muted);font-weight:500">ver 3.0</span><small id="fname">デモ映像を表示中</small></div>
     <label class="btn primary" for="file">動画を選ぶ</label>
     <input class="vh" type="file" id="file" accept="video/mp4,.mp4,.m4v,.mov,video/*" multiple>
   </header>
@@ -150,14 +150,8 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border-radius:50%;bac
       <label class="chip"><input type="checkbox" id="divider" checked><span>仕切り線</span></label>
       <label class="chip"><input type="checkbox" id="loop"><span>リピート</span></label>
       <label class="chip"><input type="checkbox" id="waudio"><span>再生中表示を抑える</span></label>
-      <label class="chip"><input type="checkbox" id="keep"><span>選んだ動画を保存</span></label>
-      <button class="btn" id="mgrBtn">保存した動画</button>
       <button class="btn" id="fs">全画面</button>
       <button class="btn" id="hide">操作を隠す</button>
-    </div>
-    <div id="mgr" hidden>
-      <div class="row" style="justify-content:space-between"><strong style="font-size:14px">保存した動画</strong><span class="note" id="mgrUse"></span></div>
-      <ul id="mgrList" style="list-style:none;margin:6px 0 0;padding:0;display:grid;gap:6px"></ul>
     </div>
     <p class="note">画面をドラッグで見回し、タップで操作パネルの表示切替。左右が逆に見えるときは「左右入れ替え」、ゆがんで見えるときは「映像の種類」を切り替えてください。</p>
   </section>
@@ -167,7 +161,7 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border-radius:50%;bac
 (function(){
   const $=id=>document.getElementById(id);
   const cv=$('stage'), v=$('vid'), ui=$('ui');
-  const S={proj:'eq180',lay:'sbs',fov:100,ipd:0,swap:false,divider:true,loop:false,waudio:true,vol:1,keep:true};
+  const S={proj:'eq180',lay:'sbs',fov:100,ipd:0,swap:false,divider:true,loop:false,waudio:true,vol:1};
   try{Object.assign(S,JSON.parse(localStorage.getItem('goggle3d.v2')||'{}'))}catch(e){}
   const save=()=>{try{localStorage.setItem('goggle3d.v2',JSON.stringify(S))}catch(e){}};
 
@@ -385,95 +379,16 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border-radius:50%;bac
       toast(`パソコンの動画 ${items.length}本を読み込みました`,4000);
     }catch(e){}
   })();
-  // ---------- saved videos (kept inside the app, Origin Private File System) ----------
-  const canStore=!!(navigator.storage&&navigator.storage.getDirectory);
-  async function vdir(){const root=await navigator.storage.getDirectory();return root.getDirectoryHandle('videos',{create:true})}
-  const WORKER_SRC=`self.onmessage=async e=>{const{file,name}=e.data;let ah=null;
-    try{const root=await navigator.storage.getDirectory();const dir=await root.getDirectoryHandle('videos',{create:true});
-      const fh=await dir.getFileHandle(name,{create:true});ah=await fh.createSyncAccessHandle();ah.truncate(0);
-      const CH=8*1024*1024;let pos=0;
-      while(pos<file.size){const buf=new Uint8Array(await file.slice(pos,pos+CH).arrayBuffer());ah.write(buf,{at:pos});pos+=buf.length;self.postMessage({p:pos/file.size})}
-      ah.flush();ah.close();self.postMessage({done:true})}
-    catch(err){try{ah&&ah.close()}catch(_){}self.postMessage({error:(err&&err.name)||String(err)})}}`;
-  let workerUrl=null;
-  function saveFile(file,onProg){
-    return new Promise((resolve,reject)=>{
-      try{
-        if(!workerUrl)workerUrl=URL.createObjectURL(new Blob([WORKER_SRC],{type:'text/javascript'}));
-        const w=new Worker(workerUrl);
-        w.onmessage=e=>{const d=e.data;if(d.p!==undefined)onProg(d.p);if(d.done){w.terminate();resolve()}if(d.error){w.terminate();reject(new Error(d.error))}};
-        w.onerror=err=>{w.terminate();reject(err)};
-        w.postMessage({file,name:file.name});
-      }catch(err){reject(err)}
-    });
-  }
-  async function listSaved(){
-    const out=[];if(!canStore)return out;
-    try{const dir=await vdir();for await(const [name,h] of dir.entries()){if(h.kind!=='file')continue;const f=await h.getFile();if(f.size>0)out.push({name,file:f})}}catch(e){}
-    out.sort((a,b)=>a.name.localeCompare(b.name,'ja'));return out;
-  }
-  async function refreshMgr(){
-    if($('mgr').hidden)return;
-    const items=await listSaved();const ul=$('mgrList');ul.textContent='';
-    if(!items.length){const li=document.createElement('li');li.className='note';li.textContent='まだ保存した動画はありません。「動画を選ぶ」で選ぶと自動で保存されます。';ul.appendChild(li)}
-    for(const it of items){
-      const li=document.createElement('li');li.style.cssText='display:flex;align-items:center;gap:10px;min-width:0';
-      const t=document.createElement('span');t.style.cssText='flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:13px';
-      t.textContent=it.name+'（'+Math.round(it.file.size/1048576)+'MB）';
-      const del=document.createElement('button');del.className='btn';del.textContent='削除';
-      del.addEventListener('click',async()=>{
-        if(del.dataset.ok!=='1'){del.dataset.ok='1';del.textContent='本当に削除';setTimeout(()=>{del.dataset.ok='';del.textContent='削除'},3000);return}
-        try{const dir=await vdir();await dir.removeEntry(it.name)}catch(e){}
-        const i=lib.findIndex(x=>x.name===it.name&&x.saved);
-        if(i>=0){lib.splice(i,1);if(curIdx===i){curIdx=-1}else if(curIdx>i)curIdx--}
-        toast('「'+it.name+'」を削除しました',2500);refreshMgr();
-      });
-      li.append(t,del);ul.appendChild(li);
-    }
-    try{const est=await navigator.storage.estimate();$('mgrUse').textContent='使用中 '+(est.usage/1073741824).toFixed(1)+'GB'}catch(e){}
-  }
-  $('mgrBtn').addEventListener('click',()=>{$('mgr').hidden=!$('mgr').hidden;refreshMgr()});
-  $('keep').checked=S.keep;
-  $('keep').addEventListener('change',e=>{S.keep=e.target.checked;save()});
-  // load saved videos at startup
-  (async()=>{
-    const items=await listSaved();if(!items.length||lib.length)return;
-    lib=items.map(it=>({name:it.name,url:URL.createObjectURL(it.file),thumb:null,saved:true}));
-    loadVideo(0,false);thumbGen++;makeThumbs(thumbGen);
-    toast(`保存した動画 ${lib.length}本を読み込みました`,3500);
-  })();
-  let saving=false;const saveQueue=[];
-  async function runSaveQueue(){
-    if(saving)return;saving=true;
-    try{if(navigator.storage.persist)await navigator.storage.persist()}catch(e){}
-    while(saveQueue.length){
-      const f=saveQueue.shift(),total=saveQueue.length+1;
-      try{
-        await saveFile(f,p=>toast(`保存中：${f.name}（${Math.round(p*100)}%）${total>1?' 残り'+total+'本':''}`,0));
-        const it=lib.find(x=>x.name===f.name);if(it)it.saved=true;
-        toast(`「${f.name}」を保存しました`,2500);
-      }catch(err){
-        try{const dir=await vdir();await dir.removeEntry(f.name)}catch(_){}
-        const quota=/Quota/i.test(String(err&&err.message));
-        toast(quota?'iPhoneの空き容量が足りないため保存できませんでした':'保存できませんでした（この動画は今回だけ再生できます）',5000);
-        if(quota){saveQueue.length=0}
-      }
-    }
-    saving=false;refreshMgr();
-  }
-  $('file').addEventListener('change',async e=>{
+  // remove copies saved by ver 2.8 to free iPhone storage
+  (async()=>{try{if(navigator.storage&&navigator.storage.getDirectory){const root=await navigator.storage.getDirectory();await root.removeEntry('videos',{recursive:true})}}catch(e){}})();
+  $('file').addEventListener('change',e=>{
     const fs=Array.from((e.target.files)||[]);if(!fs.length)return;
+    lib.forEach(it=>{if(!it.remote)URL.revokeObjectURL(it.url)});
+    lib=fs.map(f=>({name:f.name,url:URL.createObjectURL(f),thumb:null}));
+    loadVideo(0,false);
+    thumbGen++;makeThumbs(thumbGen);
+    toast(lib.length>1?`${lib.length}本の動画を読み込みました。再生ボタンを押してください`:'再生ボタンを押してください',3500);
     e.target.value='';
-    const saved=canStore?await listSaved():[];
-    const savedNames=new Set(saved.map(x=>x.name+'|'+x.file.size));
-    // keep saved videos in the list, add the newly picked ones
-    lib.forEach(it=>{if(!it.remote&&!it.saved)URL.revokeObjectURL(it.url)});
-    const keepOld=lib.filter(it=>it.saved&&!fs.some(f=>f.name===it.name));
-    const picked=fs.map(f=>({name:f.name,url:URL.createObjectURL(f),thumb:null,saved:savedNames.has(f.name+'|'+f.size)}));
-    lib=picked.concat(keepOld);
-    loadVideo(0,false);thumbGen++;makeThumbs(thumbGen);
-    toast(fs.length>1?`${fs.length}本の動画を読み込みました。再生ボタンを押してください`:'再生ボタンを押してください',3000);
-    if(S.keep&&canStore){fs.forEach(f=>{if(!savedNames.has(f.name+'|'+f.size))saveQueue.push(f)});runSaveQueue()}
   });
   const fmt=t=>{if(!isFinite(t))return'0:00';t=Math.floor(t);const h=Math.floor(t/3600),m=Math.floor(t%3600/60),s=t%60;return(h?h+':'+String(m).padStart(2,'0'):m)+':'+String(s).padStart(2,'0')};
   const setIcon=p=>{$('playIcon').innerHTML=p?'<path d="M6 4h4v16H6zM14 4h4v16h-4z"/>':'<path d="M7 4l13 8-13 8z"/>';$('play').setAttribute('aria-label',p?'一時停止':'再生')};
