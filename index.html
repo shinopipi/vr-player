@@ -103,7 +103,7 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border-radius:50%;bac
 
 <div id="ui" class="compact">
   <header class="top">
-    <div class="brand">ゴーグル3Dプレーヤー <span style="font-size:11px;color:var(--muted);font-weight:500">ver 3.0</span><small id="fname">デモ映像を表示中</small></div>
+    <div class="brand">ゴーグル3Dプレーヤー <span style="font-size:11px;color:var(--muted);font-weight:500">ver 3.1</span><small id="fname">デモ映像を表示中</small></div>
     <label class="btn primary" for="file">動画を選ぶ</label>
     <input class="vh" type="file" id="file" accept="video/mp4,.mp4,.m4v,.mov,video/*" multiple>
   </header>
@@ -153,6 +153,12 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border-radius:50%;bac
       <button class="btn" id="fs">全画面</button>
       <button class="btn" id="hide">操作を隠す</button>
     </div>
+    <div class="row" style="align-items:stretch">
+      <span class="label" style="align-self:center">クラウド</span>
+      <input id="cUrl" type="url" placeholder="https://〜.workers.dev" autocomplete="off" style="flex:2;min-width:0;font:inherit;font-size:13px;padding:8px 10px;border-radius:10px;border:1px solid var(--line);background:#0d1014;color:var(--fg)">
+      <input id="cKey" type="password" placeholder="合言葉" autocomplete="off" style="flex:1;min-width:0;font:inherit;font-size:13px;padding:8px 10px;border-radius:10px;border:1px solid var(--line);background:#0d1014;color:var(--fg)">
+      <button class="btn" id="cGo">接続</button>
+    </div>
     <p class="note">画面をドラッグで見回し、タップで操作パネルの表示切替。左右が逆に見えるときは「左右入れ替え」、ゆがんで見えるときは「映像の種類」を切り替えてください。</p>
   </section>
 </div>
@@ -161,7 +167,7 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border-radius:50%;bac
 (function(){
   const $=id=>document.getElementById(id);
   const cv=$('stage'), v=$('vid'), ui=$('ui');
-  const S={proj:'eq180',lay:'sbs',fov:100,ipd:0,swap:false,divider:true,loop:false,waudio:true,vol:1};
+  const S={proj:'eq180',lay:'sbs',fov:100,ipd:0,swap:false,divider:true,loop:false,waudio:true,vol:1,cloudUrl:'',cloudKey:''};
   try{Object.assign(S,JSON.parse(localStorage.getItem('goggle3d.v2')||'{}'))}catch(e){}
   const save=()=>{try{localStorage.setItem('goggle3d.v2',JSON.stringify(S))}catch(e){}};
 
@@ -335,7 +341,7 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border-radius:50%;bac
   let hasVideo=false,lib=[],curIdx=-1,thumbGen=0;
   function loadVideo(i,autoplay){
     const it=lib[i];if(!it)return;
-    curIdx=i;v.src=it.url;v.load();hasVideo=true;
+    curIdx=i;if(it.cloud)v.crossOrigin='anonymous';else v.removeAttribute('crossorigin');v.src=it.url;v.load();hasVideo=true;
     $('fname').textContent=it.name+(lib.length>1?`（${i+1}/${lib.length}）`:'');
     v.addEventListener('loadeddata',()=>{if(!autoplay){try{v.currentTime=0.01}catch(_){}}},{once:true});
     if(autoplay){v.muted=false;v.play().catch(()=>{if(typeof flash==='function')flash('画面をタップして再生してください')})}
@@ -348,7 +354,7 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border-radius:50%;bac
     for(const it of lib){
       if(gen!==thumbGen)return;
       try{
-        tv.src=it.url;tv.load();
+        if(it.cloud)tv.crossOrigin='anonymous';else tv.removeAttribute('crossorigin');tv.src=it.url;tv.load();
         if(!await once(tv,'loadedmetadata',8000))continue;
         tv.currentTime=Math.min(tv.duration*0.1,60);
         if(!await once(tv,'seeked',8000))continue;
@@ -381,9 +387,28 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border-radius:50%;bac
   })();
   // remove copies saved by ver 2.8 to free iPhone storage
   (async()=>{try{if(navigator.storage&&navigator.storage.getDirectory){const root=await navigator.storage.getDirectory();await root.removeEntry('videos',{recursive:true})}}catch(e){}})();
+  // ---------- cloud (Cloudflare R2 via a small Worker): streams videos, list is read automatically ----------
+  async function loadCloud(manual){
+    const base=(S.cloudUrl||'').trim().replace(/\/+$/,''),key=S.cloudKey||'';
+    if(!base){if(manual)toast('クラウドのURLを入力してください',3000);return}
+    try{
+      const r=await fetch(base+'/list?key='+encodeURIComponent(key),{cache:'no-store'});
+      if(r.status===403){toast('合言葉が違います',4000);return}
+      if(!r.ok){toast('クラウドに接続できませんでした（'+r.status+'）',4000);return}
+      const list=await r.json();
+      if(!list.length){toast('クラウドに動画がありません',4000);return}
+      lib.forEach(it=>{if(!it.remote&&!it.cloud)URL.revokeObjectURL(it.url)});
+      lib=list.map(o=>({name:o.name,url:base+'/'+o.name.split('/').map(encodeURIComponent).join('/')+'?key='+encodeURIComponent(key),thumb:null,cloud:true}));
+      loadVideo(0,false);thumbGen++;makeThumbs(thumbGen);
+      toast(`クラウドの動画 ${lib.length}本を読み込みました`,3500);
+    }catch(e){toast('クラウドに接続できませんでした。URLを確認してください',4000)}
+  }
+  $('cUrl').value=S.cloudUrl||'';$('cKey').value=S.cloudKey||'';
+  $('cGo').addEventListener('click',()=>{S.cloudUrl=$('cUrl').value.trim();S.cloudKey=$('cKey').value;save();loadCloud(true)});
+  if(S.cloudUrl)loadCloud(false);
   $('file').addEventListener('change',e=>{
     const fs=Array.from((e.target.files)||[]);if(!fs.length)return;
-    lib.forEach(it=>{if(!it.remote)URL.revokeObjectURL(it.url)});
+    lib.forEach(it=>{if(!it.remote&&!it.cloud)URL.revokeObjectURL(it.url)});
     lib=fs.map(f=>({name:f.name,url:URL.createObjectURL(f),thumb:null}));
     loadVideo(0,false);
     thumbGen++;makeThumbs(thumbGen);
