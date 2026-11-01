@@ -4,6 +4,9 @@
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="3Dプレーヤー">
+<meta name="theme-color" content="#000000">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icon-180.png">
 <style>:root{padding:0}body{margin:0}[hidden]{display:none!important}</style>
 </head><body>
 <title>ゴーグル3Dプレーヤー</title>
@@ -24,6 +27,7 @@
   --font-num:"JetBrains Mono",ui-monospace,Menlo,monospace;
   color-scheme:dark;
 }
+*,*::before,*::after{box-sizing:border-box}
 html,body{height:100%;background:var(--bg);color:var(--fg);overflow:hidden}
 body{font-family:var(--font-ui);-webkit-user-select:none;user-select:none}
 #stage{position:fixed;inset:0;width:100%;height:100%;display:block;background:#000;touch-action:none}
