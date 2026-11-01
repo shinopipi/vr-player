@@ -353,17 +353,18 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border-radius:50%;bac
   const hx=hud.getContext('2d');
   const D2R=Math.PI/180;
   const UP_PITCH=28*D2R, UP_TIME=2, ICON_DWELL=1.5, DWELL=5, ITEM_R=5.5*D2R, AWAY_CLOSE=6;
-  let mode='idle', upT=0, anchorYaw=0, iconPitch=0, hoverId=null, hoverT=0, awayT=0, repeatT=0, flashMsg='', flashT=0;
+  let seekFrac=0, mode='idle', upT=0, anchorYaw=0, iconPitch=0, hoverId=null, hoverT=0, awayT=0, repeatT=0, flashMsg='', flashT=0;
   const dirOf=(yw,pt)=>[-Math.sin(yw)*Math.cos(pt),Math.sin(pt),-Math.cos(yw)*Math.cos(pt)];
   const dot=(a,b)=>a[0]*b[0]+a[1]*b[1]+a[2]*b[2];
   function flash(m){flashMsg=m;flashT=1.4}
   function menuItems(){
     if(mode==='icon')return[{id:'icon',yaw:anchorYaw,pitch:iconPitch,dwell:ICON_DWELL,label:'メニュー'}];
-    const p=iconPitch-20*D2R, sp=13*D2R;
+    const p=iconPitch-20*D2R, sp=12*D2R;
     if(mode==='menu'){
-      const ids=[['back','10秒戻る'],['fwd','10秒送る'],['zin','ズーム'],['zout','ズームアウト'],['eye','目の間隔'],['close','閉じる']];
-      return ids.map(([id,label],i)=>({id,label,yaw:anchorYaw-(i-2.5)*sp,pitch:p,dwell:DWELL}));
+      const ids=[['back','10秒戻る'],['fwd','10秒送る'],['seek','再生位置'],['zin','ズーム'],['zout','ズームアウト'],['eye','目の間隔'],['close','閉じる']];
+      return ids.map(([id,label],i)=>({id,label,yaw:anchorYaw-(i-3)*sp,pitch:p,dwell:DWELL}));
     }
+    if(mode==='seek')return[{id:'done',label:'戻る',yaw:anchorYaw,pitch:p-14*D2R,dwell:DWELL}];
     if(mode==='slider')return[
       {id:'minus',label:'狭く',yaw:anchorYaw+2.5*sp,pitch:p,cont:true},
       {id:'plus',label:'広く',yaw:anchorYaw-2.5*sp,pitch:p,cont:true},
@@ -374,6 +375,7 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border-radius:50%;bac
     if(id==='icon'){mode='menu';return}
     if(id==='close'){mode='idle';return}
     if(id==='eye'){mode='slider';return}
+    if(id==='seek'){if(!hasVideo||!v.duration){flash('動画が選ばれていません');return}mode='seek';seekFrac=v.currentTime/v.duration;return}
     if(id==='done'){mode='menu';return}
     if(id==='back'||id==='fwd'){
       if(!hasVideo){flash('動画が選ばれていません');return}
@@ -391,6 +393,18 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border-radius:50%;bac
       if(gp>UP_PITCH){upT+=dt;if(upT>=UP_TIME){mode='icon';anchorYaw=gy;iconPitch=Math.min(gp,50*D2R);upT=0;awayT=0;hoverId=null;hoverT=0}}
       else upT=0;
       return;
+    }
+    if(mode==='seek'){
+      const p=iconPitch-20*D2R, span=6*12*D2R, lY=anchorYaw+span/2;
+      let dy=lY-gy;dy=Math.atan2(Math.sin(dy),Math.cos(dy));
+      const fr=dy/span;
+      if(fr>=-0.02&&fr<=1.02&&Math.abs(gp-p)<ITEM_R){
+        const f=Math.max(0,Math.min(1,fr));awayT=0;
+        if(hoverId!=='bar'||Math.abs(f-seekFrac)>0.02){hoverId='bar';seekFrac=f;hoverT=0}
+        hoverT+=dt;
+        if(hoverT>=DWELL&&v.duration){v.currentTime=Math.min(v.duration-0.5,seekFrac*v.duration);flash(fmt(v.currentTime)+' へ移動');hoverT=0;hoverId=null;mode='idle'}
+        return;
+      }
     }
     let hit=null;
     for(const it of menuItems()){if(Math.acos(Math.max(-1,Math.min(1,dot(g,dirOf(it.yaw,it.pitch)))))<ITEM_R)hit=it}
@@ -412,6 +426,7 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border-radius:50%;bac
       case'zin':mag();ln(-r*0.24,-r*0.08,r*0.08,-r*0.08);ln(-r*0.08,-r*0.24,-r*0.08,r*0.08);break;
       case'zout':mag();ln(-r*0.24,-r*0.08,r*0.08,-r*0.08);break;
       case'eye':c.beginPath();c.moveTo(-r*0.45,0);c.quadraticCurveTo(0,-r*0.42,r*0.45,0);c.quadraticCurveTo(0,r*0.42,-r*0.45,0);c.stroke();c.beginPath();c.arc(0,0,r*0.13,0,Math.PI*2);c.fill();break;
+      case'seek':ln(-r*0.42,r*0.05,r*0.42,r*0.05);c.beginPath();c.arc(r*0.1,r*0.05,r*0.12,0,Math.PI*2);c.fill();ln(-r*0.42,-r*0.22,-r*0.42,r*0.32);ln(r*0.42,-r*0.22,r*0.42,r*0.32);break;
       case'close':ln(-r*0.28,-r*0.28,r*0.28,r*0.28);ln(r*0.28,-r*0.28,-r*0.28,r*0.28);break;
       case'icon':ln(-r*0.32,-r*0.2,r*0.32,-r*0.2);ln(-r*0.32,0,r*0.32,0);ln(-r*0.32,r*0.2,r*0.32,r*0.2);break;
       case'minus':ln(-r*0.3,0,r*0.3,0);break;
@@ -440,6 +455,20 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border-radius:50%;bac
           const k=l+(S.ipd+60)/120*(r_-l);hx.fillStyle='#7cc7ff';hx.beginPath();hx.arc(k,y,rpx*0.22,0,Math.PI*2);hx.fill();
           hx.fillStyle='#e8edf2';hx.textAlign='center';hx.font=`700 ${Math.round(rpx*0.42)}px "Hiragino Sans",sans-serif`;
           hx.fillText('目の間隔 '+(S.ipd>0?'+':'')+S.ipd,(l+r_)/2,y-rpx*0.6)}
+      }
+      if(mode==='seek'){
+        const bp=iconPitch-20*D2R, span=6*12*D2R;
+        const a=proj(dirOf(anchorYaw+span/2,bp),ox),b=proj(dirOf(anchorYaw-span/2,bp),ox);
+        if(a&&b){const l=a[0],r_=b[0],y=(a[1]+b[1])/2,bh=rpx*0.5;
+          hx.fillStyle='rgba(10,14,18,.8)';hx.fillRect(l-rpx*0.3,y-rpx*0.9,r_-l+rpx*0.6,rpx*1.8);
+          hx.fillStyle='#2a323b';hx.fillRect(l,y-bh/2,r_-l,bh);
+          const cur=v.duration?v.currentTime/v.duration:0;hx.fillStyle='rgba(124,199,255,.45)';hx.fillRect(l,y-bh/2,(r_-l)*cur,bh);
+          const tx=l+(r_-l)*seekFrac, on=hoverId==='bar';
+          hx.fillStyle=on?'#7cc7ff':'#e8edf2';hx.fillRect(tx-2*dpr,y-bh,4*dpr,bh*2);
+          if(on){hx.strokeStyle='#7cc7ff';hx.lineWidth=Math.max(3,rpx*0.1);hx.beginPath();hx.arc(tx,y,rpx*0.55,-Math.PI/2,-Math.PI/2+Math.min(1,hoverT/DWELL)*Math.PI*2);hx.stroke()}
+          hx.fillStyle='#e8edf2';hx.textAlign='center';hx.font=`700 ${Math.round(rpx*0.4)}px "Hiragino Sans",sans-serif`;
+          hx.fillText(fmt(seekFrac*(v.duration||0))+' / '+fmt(v.duration),tx,y-rpx*1.1);
+          hx.font=`500 ${Math.round(rpx*0.3)}px "Hiragino Sans",sans-serif`;hx.fillText('移動したい位置を5秒見つめる',(l+r_)/2,y+rpx*1.4)}
       }
       for(const it of items){
         const p=proj(dirOf(it.yaw,it.pitch),ox);if(!p)continue;
