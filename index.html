@@ -103,7 +103,7 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border-radius:50%;bac
 
 <div id="ui" class="compact">
   <header class="top">
-    <div class="brand">ゴーグル3Dプレーヤー <span style="font-size:11px;color:var(--muted);font-weight:500">ver 3.1</span><small id="fname">デモ映像を表示中</small></div>
+    <div class="brand">ゴーグル3Dプレーヤー <span style="font-size:11px;color:var(--muted);font-weight:500">ver 3.2</span><small id="fname">デモ映像を表示中</small></div>
     <label class="btn primary" for="file">動画を選ぶ</label>
     <input class="vh" type="file" id="file" accept="video/mp4,.mp4,.m4v,.mov,video/*" multiple>
   </header>
@@ -158,6 +158,8 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border-radius:50%;bac
       <input id="cUrl" type="url" placeholder="https://〜.workers.dev" autocomplete="off" style="flex:2;min-width:0;font:inherit;font-size:13px;padding:8px 10px;border-radius:10px;border:1px solid var(--line);background:#0d1014;color:var(--fg)">
       <input id="cKey" type="password" placeholder="合言葉" autocomplete="off" style="flex:1;min-width:0;font:inherit;font-size:13px;padding:8px 10px;border-radius:10px;border:1px solid var(--line);background:#0d1014;color:var(--fg)">
       <button class="btn" id="cGo">接続</button>
+      <label class="btn" for="cUp">クラウドに上げる</label>
+      <input class="vh" type="file" id="cUp" accept="video/mp4,.mp4,.m4v,.mov,video/*" multiple>
     </div>
     <p class="note">画面をドラッグで見回し、タップで操作パネルの表示切替。左右が逆に見えるときは「左右入れ替え」、ゆがんで見えるときは「映像の種類」を切り替えてください。</p>
   </section>
@@ -406,6 +408,40 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border-radius:50%;bac
   $('cUrl').value=S.cloudUrl||'';$('cKey').value=S.cloudKey||'';
   $('cGo').addEventListener('click',()=>{S.cloudUrl=$('cUrl').value.trim();S.cloudKey=$('cKey').value;save();loadCloud(true)});
   if(S.cloudUrl)loadCloud(false);
+  // upload big videos to R2 in 20MB parts through the Worker
+  let uploading=false;
+  async function uploadOne(base,key,f,idx,total){
+    const q=(extra)=>'?key='+encodeURIComponent(key)+'&name='+encodeURIComponent(f.name)+(extra||'');
+    const tryFetch=async(url,opt)=>{let last;for(let t=0;t<3;t++){try{const r=await fetch(url,opt);if(r.ok)return r.json();last=new Error(r.status+' '+await r.text())}catch(e){last=e}await new Promise(r=>setTimeout(r,1500*(t+1)))}throw last};
+    const {uploadId}=await tryFetch(base+'/upload/create'+q('&type='+encodeURIComponent(f.type||'video/mp4')),{method:'POST'});
+    const PART=20*1024*1024,parts=[];let pos=0,n=1;
+    try{
+      while(pos<f.size){
+        const blob=f.slice(pos,pos+PART);
+        toast(`アップロード中 ${idx}/${total}：${f.name}（${Math.floor(pos/f.size*100)}%）`,0);
+        const part=await tryFetch(base+'/upload/part'+q('&uploadId='+encodeURIComponent(uploadId)+'&part='+n),{method:'PUT',body:blob});
+        parts.push({partNumber:part.partNumber,etag:part.etag});pos+=blob.size;n++;
+      }
+      await tryFetch(base+'/upload/complete'+q('&uploadId='+encodeURIComponent(uploadId)),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(parts)});
+    }catch(e){
+      try{await fetch(base+'/upload/abort'+q('&uploadId='+encodeURIComponent(uploadId)),{method:'POST'})}catch(_){}
+      throw e;
+    }
+  }
+  $('cUp').addEventListener('change',async e=>{
+    const fs=Array.from(e.target.files||[]);e.target.value='';if(!fs.length)return;
+    const base=(S.cloudUrl||'').trim().replace(/\/+$/,''),key=S.cloudKey||'';
+    if(!base){toast('先にクラウドのURLと合言葉を入れて「接続」してください',4000);return}
+    if(uploading){toast('アップロード中です。終わるまでお待ちください',3000);return}
+    uploading=true;lockWake();let ok=0;
+    for(let i=0;i<fs.length;i++){
+      try{await uploadOne(base,key,fs[i],i+1,fs.length);ok++}
+      catch(err){toast(`「${fs[i].name}」をアップロードできませんでした`,5000);await new Promise(r=>setTimeout(r,2500))}
+    }
+    uploading=false;
+    toast(`${ok}本アップロードしました`,4000);
+    if(ok)loadCloud(false);
+  });
   $('file').addEventListener('change',e=>{
     const fs=Array.from((e.target.files)||[]);if(!fs.length)return;
     lib.forEach(it=>{if(!it.remote&&!it.cloud)URL.revokeObjectURL(it.url)});
