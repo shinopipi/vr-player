@@ -100,9 +100,9 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border-radius:50%;bac
 
 <div id="ui">
   <header class="top">
-    <div class="brand">ゴーグル3Dプレーヤー <span style="font-size:11px;color:var(--muted);font-weight:500">ver 1.4</span><small id="fname">デモ映像を表示中</small></div>
+    <div class="brand">ゴーグル3Dプレーヤー <span style="font-size:11px;color:var(--muted);font-weight:500">ver 1.5</span><small id="fname">デモ映像を表示中</small></div>
     <label class="btn primary" for="file">動画を選ぶ</label>
-    <input class="vh" type="file" id="file" accept="video/mp4,.mp4,.m4v,.mov,video/*">
+    <input class="vh" type="file" id="file" accept="video/mp4,.mp4,.m4v,.mov,video/*" multiple>
   </header>
 
   <div class="toast" id="toast">iPhoneを横向きにして、画面をドラッグすると見回せます</div>
@@ -312,14 +312,44 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border-radius:50%;bac
   $('hide').addEventListener('click',()=>showUI(false));
 
   // ---------- file & transport ----------
-  let hasVideo=false,url=null;
+  let hasVideo=false,lib=[],curIdx=-1,thumbGen=0;
+  function loadVideo(i,autoplay){
+    const it=lib[i];if(!it)return;
+    curIdx=i;v.src=it.url;v.load();hasVideo=true;
+    $('fname').textContent=it.name+(lib.length>1?`（${i+1}/${lib.length}）`:'');
+    v.addEventListener('loadeddata',()=>{if(!autoplay){try{v.currentTime=0.01}catch(_){}}},{once:true});
+    if(autoplay){v.muted=false;v.play().catch(()=>{if(typeof flash==='function')flash('画面をタップして再生してください')})}
+  }
+  v.addEventListener('error',()=>{if(!hasVideo)return;toast('この動画は再生できませんでした。別のMP4をお試しください',5000)});
+  v.addEventListener('ended',()=>{if(!S.loop&&lib.length>1&&curIdx<lib.length-1)loadVideo(curIdx+1,true)});
+  const tv=document.createElement('video');tv.muted=true;tv.playsInline=true;tv.setAttribute('playsinline','');tv.preload='auto';
+  function once(el,ev,ms){return new Promise(res=>{const t=setTimeout(()=>res(false),ms);el.addEventListener(ev,()=>{clearTimeout(t);res(true)},{once:true})})}
+  async function makeThumbs(gen){
+    for(const it of lib){
+      if(gen!==thumbGen)return;
+      try{
+        tv.src=it.url;tv.load();
+        if(!await once(tv,'loadedmetadata',8000))continue;
+        tv.currentTime=Math.min(tv.duration*0.1,60);
+        if(!await once(tv,'seeked',8000))continue;
+        const w=tv.videoWidth,h=tv.videoHeight;let ew=w,eh=h;
+        if(S.lay==='sbs')ew=w/2;else if(S.lay==='tb')eh=h/2;
+        const cw=ew*0.6,ch=cw*9/16;
+        const c=document.createElement('canvas');c.width=320;c.height=180;
+        c.getContext('2d').drawImage(tv,(ew-cw)/2,(eh-ch)/2,cw,ch,0,0,320,180);
+        it.thumb=c;
+      }catch(e){}
+    }
+    tv.removeAttribute('src');tv.load();
+  }
   $('file').addEventListener('change',e=>{
-    const f=e.target.files&&e.target.files[0];if(!f)return;
-    if(url)URL.revokeObjectURL(url);
-    url=URL.createObjectURL(f);v.src=url;v.load();hasVideo=true;$('fname').textContent=f.name;
-    v.addEventListener('error',()=>{hasVideo=false;$('fname').textContent='この動画は再生できません';toast('この動画は再生できませんでした。別のMP4をお試しください',5000)},{once:true});
-    v.addEventListener('loadeddata',()=>{try{v.currentTime=0.01}catch(_){}},{once:true});
-    toast('再生ボタンを押してください',3000);
+    const fs=Array.from((e.target.files)||[]);if(!fs.length)return;
+    lib.forEach(it=>URL.revokeObjectURL(it.url));
+    lib=fs.map(f=>({name:f.name,url:URL.createObjectURL(f),thumb:null}));
+    loadVideo(0,false);
+    thumbGen++;makeThumbs(thumbGen);
+    toast(lib.length>1?`${lib.length}本の動画を読み込みました。再生ボタンを押してください`:'再生ボタンを押してください',3500);
+    e.target.value='';
   });
   const fmt=t=>{if(!isFinite(t))return'0:00';t=Math.floor(t);const h=Math.floor(t/3600),m=Math.floor(t%3600/60),s=t%60;return(h?h+':'+String(m).padStart(2,'0'):m)+':'+String(s).padStart(2,'0')};
   const setIcon=p=>{$('playIcon').innerHTML=p?'<path d="M6 4h4v16H6zM14 4h4v16h-4z"/>':'<path d="M7 4l13 8-13 8z"/>';$('play').setAttribute('aria-label',p?'一時停止':'再生')};
@@ -371,10 +401,21 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border-radius:50%;bac
     {id:'iminus',cx:620,cy:100,r:34,cont:true},{id:'iplus',cx:960,cy:100,r:34,cont:true},
     {id:'close',cx:1120,cy:100,r:38},
     {id:'seek',x:60,y:215,w:1080,h:70},
-    {id:'recenter',cx:250,cy:BY,r:58},{id:'back',cx:425,cy:BY,r:58},{id:'play',cx:600,cy:BY,r:74},
-    {id:'fwd',cx:775,cy:BY,r:58},{id:'swap',cx:950,cy:BY,r:58}];
-  const LABEL={recenter:'正面に戻す',back:'10秒戻る',fwd:'10秒送る',swap:'左右入れ替え'};
-  function regionAt(x,y){for(const g of REG){if(g.w){if(x>=g.x&&x<=g.x+g.w&&y>=g.y&&y<=g.y+g.h)return g}else if(Math.hypot(x-g.cx,y-g.cy)<=g.r*1.15)return g}return null}
+    {id:'recenter',cx:140,cy:BY,r:56},{id:'back',cx:320,cy:BY,r:56},{id:'play',cx:500,cy:BY,r:72},
+    {id:'fwd',cx:680,cy:BY,r:56},{id:'swap',cx:860,cy:BY,r:56},{id:'list',cx:1040,cy:BY,r:56}];
+  const LABEL={recenter:'正面に戻す',back:'10秒戻る',fwd:'10秒送る',swap:'左右入れ替え',list:'動画一覧'};
+  let panelView='main',page=0;const PER=6;
+  const TX=[80,440,800],TY=[120,385],TW=320,TH=180;
+  function listRegions(){
+    const r=[{id:'lback',x:30,y:20,w:200,h:70},{id:'close',cx:1120,cy:55,r:36}];
+    const pages=Math.max(1,Math.ceil(lib.length/PER));
+    if(page>0)r.push({id:'prev',cx:40,cy:300,r:32});
+    if(page<pages-1)r.push({id:'next',cx:1160,cy:300,r:32});
+    for(let k=0;k<PER;k++){const i=page*PER+k;if(i>=lib.length)break;r.push({id:'v'+i,vid:i,x:TX[k%3],y:TY[(k/3)|0],w:TW,h:TH+40})}
+    return r;
+  }
+  function curRegions(){return panelView==='list'?listRegions():REG}
+  function regionAt(x,y){for(const g of curRegions()){if(g.w){if(x>=g.x&&x<=g.x+g.w&&y>=g.y&&y<=g.y+g.h)return g}else if(Math.hypot(x-g.cx,y-g.cy)<=g.r*1.15)return g}return null}
   function gazeOnPanel(g){
     const b=basis(),dn=dot(g,b.n);if(dn<0.2)return null;
     const t=PD/dn,p=[g[0]*t-b.c[0],g[1]*t-b.c[1],g[2]*t-b.c[2]];
@@ -383,8 +424,13 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border-radius:50%;bac
     return[(x+1)/2*CW,(1-y)/2*CH];
   }
   function act(id){
+    if(/^v\d+$/.test(id)){const i=+id.slice(1);loadVideo(i,true);panelView='main';flash('再生：'+lib[i].name);return}
     switch(id){
-      case'close':panelOpen=false;return;
+      case'close':panelOpen=false;panelView='main';return;
+      case'list':if(!lib.length){flash('先に「動画を選ぶ」で動画をまとめて選んでください');return}panelView='list';page=Math.max(0,Math.floor(curIdx/PER));return;
+      case'lback':panelView='main';return;
+      case'prev':page=Math.max(0,page-1);return;
+      case'next':page=Math.min(Math.ceil(lib.length/PER)-1,page+1);return;
       case'recenter':recenter();pYaw=0;pPitch=-6*D2R;flash('正面に戻しました');return;
       case'back':case'fwd':
         if(!hasVideo){flash('動画が選ばれていません');return}
@@ -407,7 +453,7 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border-radius:50%;bac
     if(flashT>0)flashT-=dt;
     const g=[-R[6],-R[7],-R[8]],gp=Math.asin(Math.max(-1,Math.min(1,g[1]))),gy=Math.atan2(-g[0],-g[2]);
     if(!panelOpen){
-      gazeUV=null;
+      gazeUV=null;panelView='main';
       if(gp>UP_PITCH){upT+=dt;if(upT>=UP_TIME){panelOpen=true;upT=0;pYaw=gy;pPitch=-6*D2R;awayT=0;hoverId=null;hoverT=0}}else upT=0;
       return;
     }
@@ -448,14 +494,48 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border-radius:50%;bac
       case'back':tri(-r*0.16,-1,r*0.17);tri(r*0.18,-1,r*0.17);break;
       case'fwd':tri(-r*0.18,1,r*0.17);tri(r*0.16,1,r*0.17);break;
       case'play':if(hasVideo&&!v.paused){c.fillRect(-r*0.22,-r*0.3,r*0.15,r*0.6);c.fillRect(r*0.07,-r*0.3,r*0.15,r*0.6)}else tri(r*0.05,1,r*0.24);break;
+      case'list':c.fillRect(-r*0.36,-r*0.3,r*0.3,r*0.24);c.fillRect(r*0.06,-r*0.3,r*0.3,r*0.24);c.fillRect(-r*0.36,r*0.06,r*0.3,r*0.24);c.fillRect(r*0.06,r*0.06,r*0.3,r*0.24);break;
       case'swap':ln(-r*0.35,-r*0.13,r*0.35,-r*0.13);ln(r*0.2,-r*0.27,r*0.35,-r*0.13);ln(r*0.35,r*0.13,-r*0.35,r*0.13);ln(-r*0.2,r*0.27,-r*0.35,r*0.13);break;
     }
     c.restore();
+  }
+  function drawList(c){
+    const regs=listRegions();
+    c.textAlign='left';c.fillStyle=FG;c.font=`700 30px ${JP}`;
+    const lb=regs[0],lh=hoverId==='lback';
+    rr(c,lb.x,lb.y,lb.w,lb.h,18);c.fillStyle=lh?'rgba(124,199,255,0.18)':'rgba(255,255,255,0.06)';c.fill();c.strokeStyle=lh?ACC:'rgba(238,242,246,0.4)';c.lineWidth=3;c.stroke();
+    c.fillStyle=FG;c.fillText('‹ 戻る',lb.x+40,lb.y+lb.h/2);
+    if(lh){c.fillStyle=ACC;c.fillRect(lb.x+14,lb.y+lb.h-10,(lb.w-28)*clamp01(hoverT/DWELL),5)}
+    c.textAlign='center';c.font=`700 32px ${JP}`;c.fillText(`動画一覧（${lib.length}本）`,600,55);
+    for(const g of regs){
+      if(g.vid===undefined){
+        if(g.id==='lback')continue;
+        const hov=hoverId===g.id;c.beginPath();c.arc(g.cx,g.cy,g.r,0,Math.PI*2);c.fillStyle=hov?'rgba(124,199,255,0.18)':'rgba(255,255,255,0.06)';c.fill();
+        c.strokeStyle=hov?ACC:'rgba(238,242,246,0.4)';c.lineWidth=3;c.stroke();
+        if(g.id==='close')icon(c,'close',g.cx,g.cy,g.r);
+        else{c.save();c.translate(g.cx,g.cy);c.strokeStyle=FG;c.lineWidth=5;c.lineCap='round';c.beginPath();const d=g.id==='prev'?1:-1;c.moveTo(d*8,-14);c.lineTo(-d*8,0);c.lineTo(d*8,14);c.stroke();c.restore()}
+        if(hov)ring(c,g.cx,g.cy,g.r+9,hoverT/DWELL);
+        continue;
+      }
+      const it=lib[g.vid],hov=hoverId===g.id,cur=g.vid===curIdx;
+      c.save();rr(c,g.x,g.y,TW,TH,14);c.clip();
+      if(it.thumb)c.drawImage(it.thumb,g.x,g.y,TW,TH);else{c.fillStyle='#1d232b';c.fillRect(g.x,g.y,TW,TH);c.fillStyle=MUTED;c.font=`500 22px ${JP}`;c.fillText('読み込み中…',g.x+TW/2,g.y+TH/2)}
+      c.restore();
+      rr(c,g.x,g.y,TW,TH,14);c.strokeStyle=hov?ACC:(cur?'rgba(124,199,255,0.7)':'rgba(238,242,246,0.25)');c.lineWidth=hov?6:3;c.stroke();
+      if(cur){c.fillStyle='rgba(124,199,255,0.9)';rr(c,g.x+10,g.y+10,96,34,8);c.fill();c.fillStyle='#04121d';c.font=`700 20px ${JP}`;c.fillText('再生中',g.x+58,g.y+28)}
+      if(hov){c.fillStyle='rgba(0,0,0,.55)';c.fillRect(g.x,g.y+TH-12,TW,12);c.fillStyle=ACC;c.fillRect(g.x,g.y+TH-12,TW*clamp01(hoverT/DWELL),12)}
+      let t=it.name;c.font=`600 22px ${JP}`;while(t.length>1&&c.measureText(t).width>TW-10)t=t.slice(0,-2)+'…';
+      c.fillStyle=FG;c.fillText(t,g.x+TW/2,g.y+TH+24);
+    }
+    const pages=Math.max(1,Math.ceil(lib.length/PER));
+    c.font=`500 22px ${JP}`;c.fillStyle=MUTED;
+    c.fillText(flashT>0?flashMsg:(pages>1?`${page+1} / ${pages} ページ ・ `:'')+'動画を5秒見つめると再生',600,665);
   }
   function drawPanel(){
     const c=px;c.clearRect(0,0,CW,CH);
     rr(c,4,4,CW-8,CH-8,40);c.fillStyle='rgba(12,14,18,0.86)';c.fill();c.strokeStyle='rgba(255,255,255,0.10)';c.lineWidth=2;c.stroke();
     c.textBaseline='middle';
+    if(panelView==='list'){drawList(c);if(gazeUV){c.beginPath();c.arc(gazeUV[0],gazeUV[1],9,0,Math.PI*2);c.fillStyle='#fff';c.fill();c.lineWidth=3;c.strokeStyle='rgba(0,0,0,.6)';c.stroke()}return}
     // zoom & eye-distance sliders
     const bar=(l,r_,f)=>{rr(c,l,94,r_-l,12,6);c.fillStyle=TRACK;c.fill();rr(c,l,94,(r_-l)*clamp01(f),12,6);c.fillStyle=ACC;c.fill();c.beginPath();c.arc(l+(r_-l)*clamp01(f),100,13,0,Math.PI*2);c.fillStyle=FG;c.fill()};
     c.fillStyle=MUTED;c.font=`500 24px ${JP}`;c.textAlign='center';
