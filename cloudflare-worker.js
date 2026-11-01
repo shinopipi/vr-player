@@ -48,23 +48,42 @@ export default {
       return new Response(null, { headers: h });
     }
 
-    const hasRange = req.headers.has('Range');
-    const obj = await env.BUCKET.get(key, hasRange ? { range: req.headers } : {});
+    const head = await env.BUCKET.head(key);
+    if (!head) return new Response('not found', { status: 404, headers: CORS });
+    const size = head.size;
+    const range = parseRange(req.headers.get('Range'), size);
+    if (range === 'bad') {
+      return new Response(null, { status: 416, headers: { ...CORS, 'Content-Range': `bytes */${size}` } });
+    }
+    const obj = await env.BUCKET.get(key, range ? { range } : {});
     if (!obj) return new Response('not found', { status: 404, headers: CORS });
     const h = headersFor(obj);
-
-    if (hasRange && obj.range) {
-      const r = obj.range;
-      const start = 'suffix' in r ? obj.size - r.suffix : (r.offset || 0);
-      const length = 'suffix' in r ? r.suffix : (r.length ?? obj.size - start);
-      h.set('Content-Range', `bytes ${start}-${start + length - 1}/${obj.size}`);
-      h.set('Content-Length', String(length));
+    if (range) {
+      h.set('Content-Range', `bytes ${range.offset}-${range.offset + range.length - 1}/${size}`);
+      h.set('Content-Length', String(range.length));
       return new Response(obj.body, { status: 206, headers: h });
     }
-    h.set('Content-Length', String(obj.size));
+    h.set('Content-Length', String(size));
     return new Response(obj.body, { headers: h });
   },
 };
+
+// "bytes=START-END", "bytes=START-" or "bytes=-SUFFIX" -> {offset, length}; null = whole file; 'bad' = out of range
+function parseRange(header, size) {
+  const m = /^bytes=(\d*)-(\d*)/.exec(header || '');
+  if (!m || (m[1] === '' && m[2] === '')) return null;
+  let start, end;
+  if (m[1] === '') {
+    const n = parseInt(m[2], 10);
+    start = Math.max(0, size - n);
+    end = size - 1;
+  } else {
+    start = parseInt(m[1], 10);
+    end = m[2] === '' ? size - 1 : Math.min(parseInt(m[2], 10), size - 1);
+  }
+  if (!(start >= 0) || start > end || start >= size) return 'bad';
+  return { offset: start, length: end - start + 1 };
+}
 
 function headersFor(obj) {
   const h = new Headers(CORS);
