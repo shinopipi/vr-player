@@ -103,7 +103,7 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border-radius:50%;bac
 
 <div id="ui" class="compact">
   <header class="top">
-    <div class="brand">ゴーグル3Dプレーヤー <span style="font-size:11px;color:var(--muted);font-weight:500">ver 3.3</span><small id="fname">デモ映像を表示中</small></div>
+    <div class="brand">ゴーグル3Dプレーヤー <span style="font-size:11px;color:var(--muted);font-weight:500">ver 3.4</span><small id="fname">デモ映像を表示中</small></div>
     <label class="btn primary" for="file">動画を選ぶ</label>
     <input class="vh" type="file" id="file" accept="video/mp4,.mp4,.m4v,.mov,video/*" multiple>
   </header>
@@ -140,7 +140,7 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border-radius:50%;bac
 
     <div class="sliders">
       <div class="sl"><span class="label">視野の広さ</span><input type="range" id="fov" min="60" max="130" value="100"><span class="val" id="fovV">100°</span></div>
-      <div class="sl"><span class="label">目の間隔</span><input type="range" id="ipd" min="-60" max="60" value="0"><span class="val" id="ipdV">0</span></div>
+      <div class="sl"><span class="label">目の間隔</span><input type="range" id="ipd" min="-60" max="60" value="0"><button class="val" id="ipdV" title="タップで0に戻す" style="font:inherit;font-family:var(--font-num);font-size:12px;background:none;border:1px solid var(--line);border-radius:8px;color:var(--fg);padding:4px 6px;cursor:pointer">0</button></div>
     </div>
 
     <div class="row">
@@ -318,6 +318,7 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border-radius:50%;bac
   document.querySelectorAll('[data-proj]').forEach(b=>b.addEventListener('click',()=>{S.proj=b.dataset.proj;syncUI();save()}));
   document.querySelectorAll('[data-lay]').forEach(b=>b.addEventListener('click',()=>{S.lay=b.dataset.lay;syncUI();save()}));
   $('fov').addEventListener('input',e=>{S.fov=+e.target.value;syncUI();save()});
+  $('ipdV').addEventListener('click',()=>{S.ipd=0;syncUI();save();toast('目の間隔を0に戻しました',2000)});
   $('ipd').addEventListener('input',e=>{S.ipd=+e.target.value;syncUI();save()});
   ['swap','divider','loop'].forEach(k=>$(k).addEventListener('change',e=>{S[k]=e.target.checked;syncUI();save()}));
   $('waudio').addEventListener('change',e=>{S.waudio=e.target.checked;syncUI();save();toast('アプリを開き直すと切り替わります',4000)});
@@ -567,7 +568,7 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border-radius:50%;bac
       case'iminus':S.ipd=Math.max(-60,S.ipd-1);break;
       case'iplus':S.ipd=Math.min(60,S.ipd+1);break;
       case'zbar':S.fov=Math.round(130-seekFrac*70);break;
-      case'ibar':S.ipd=Math.round(seekFrac*120-60);break;
+      case'ibar':{const n=Math.round(seekFrac*120-60);S.ipd=Math.abs(n)<=6?0:n;break}
       case'vbar':S.vol=Math.round(seekFrac*20)/20;applyVol();break;
       case'vminus':S.vol=Math.max(0,Math.round((S.vol-0.05)*100)/100);applyVol();break;
       case'vplus':S.vol=Math.min(1,Math.round((S.vol+0.05)*100)/100);applyVol();break;
