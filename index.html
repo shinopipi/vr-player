@@ -103,7 +103,7 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border-radius:50%;bac
 
 <div id="ui" class="compact">
   <header class="top">
-    <div class="brand">ゴーグル3Dプレーヤー <span style="font-size:11px;color:var(--muted);font-weight:500">ver 3.4</span><small id="fname">デモ映像を表示中</small></div>
+    <div class="brand">ゴーグル3Dプレーヤー <span style="font-size:11px;color:var(--muted);font-weight:500">ver 3.5</span><small id="fname">デモ映像を表示中</small></div>
     <label class="btn primary" for="file">動画を選ぶ</label>
     <input class="vh" type="file" id="file" accept="video/mp4,.mp4,.m4v,.mov,video/*" multiple>
   </header>
@@ -344,7 +344,7 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border-radius:50%;bac
   let hasVideo=false,lib=[],curIdx=-1,thumbGen=0;
   function loadVideo(i,autoplay){
     const it=lib[i];if(!it)return;
-    curIdx=i;if(it.cloud)v.crossOrigin='anonymous';else v.removeAttribute('crossorigin');v.src=it.url;v.load();hasVideo=true;
+    curIdx=i;if(it.cloud)v.crossOrigin='anonymous';else v.removeAttribute('crossorigin');v.preload=it.cloud?'metadata':'auto';v.src=it.url;v.load();hasVideo=true;
     $('fname').textContent=it.name+(lib.length>1?`（${i+1}/${lib.length}）`:'');
     v.addEventListener('loadeddata',()=>{if(!autoplay){try{v.currentTime=0.01}catch(_){}}},{once:true});
     if(autoplay){v.muted=false;v.play().catch(()=>{if(typeof flash==='function')flash('画面をタップして再生してください')})}
@@ -363,6 +363,7 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border-radius:50%;bac
   v.addEventListener('ended',()=>{if(!S.loop&&lib.length>1&&curIdx<lib.length-1)loadVideo(curIdx+1,true)});
   const tv=document.createElement('video');tv.muted=true;tv.playsInline=true;tv.setAttribute('playsinline','');tv.preload='auto';
   function once(el,ev,ms){return new Promise(res=>{const t=setTimeout(()=>res(false),ms);el.addEventListener(ev,()=>{clearTimeout(t);res(true)},{once:true})})}
+  let thumbsReady=false; // thumbnails are made only when the video list is opened, so they don't slow down playback
   async function makeThumbs(gen){
     for(const it of lib){
       if(gen!==thumbGen)return;
@@ -394,7 +395,7 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border-radius:50%;bac
       });
       if(!items.length){toast('パソコンの動画フォルダが空です',4000);return}
       items.sort((a,b)=>a.name.localeCompare(b.name,'ja'));
-      lib=items;loadVideo(0,false);thumbGen++;makeThumbs(thumbGen);
+      lib=items;loadVideo(0,false);thumbGen++;thumbsReady=false;
       toast(`パソコンの動画 ${items.length}本を読み込みました`,4000);
     }catch(e){}
   })();
@@ -412,7 +413,7 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border-radius:50%;bac
       if(!list.length){toast('クラウドに動画がありません',4000);return}
       lib.forEach(it=>{if(!it.remote&&!it.cloud)URL.revokeObjectURL(it.url)});
       lib=list.map(o=>({name:o.name,url:base+'/'+o.name.split('/').map(encodeURIComponent).join('/')+'?key='+encodeURIComponent(key),thumb:null,cloud:true}));
-      loadVideo(0,false);thumbGen++;makeThumbs(thumbGen);
+      loadVideo(0,false);thumbGen++;thumbsReady=false;
       toast(`クラウドの動画 ${lib.length}本を読み込みました`,3500);
     }catch(e){toast('クラウドに接続できませんでした。URLを確認してください',4000)}
   }
@@ -458,7 +459,7 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border-radius:50%;bac
     lib.forEach(it=>{if(!it.remote&&!it.cloud)URL.revokeObjectURL(it.url)});
     lib=fs.map(f=>({name:f.name,url:URL.createObjectURL(f),thumb:null}));
     loadVideo(0,false);
-    thumbGen++;makeThumbs(thumbGen);
+    thumbGen++;thumbsReady=false;
     toast(lib.length>1?`${lib.length}本の動画を読み込みました。再生ボタンを押してください`:'再生ボタンを押してください',3500);
     e.target.value='';
   });
@@ -542,7 +543,7 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border-radius:50%;bac
     if(/^v\d+$/.test(id)){const i=+id.slice(1);loadVideo(i,true);panelView='main';flash('再生：'+lib[i].name);return}
     switch(id){
       case'close':panelOpen=false;panelView='main';return;
-      case'list':if(!lib.length){flash('先に「動画を選ぶ」で動画をまとめて選んでください');return}panelView='list';page=Math.max(0,Math.floor(curIdx/PER));return;
+      case'list':if(!lib.length){flash('先に「動画を選ぶ」で動画をまとめて選んでください');return}panelView='list';if(!thumbsReady){thumbsReady=true;makeThumbs(thumbGen)}page=Math.max(0,Math.floor(curIdx/PER));return;
       case'lback':panelView='main';return;
       case'prev':page=Math.max(0,page-1);return;
       case'next':page=Math.min(Math.ceil(lib.length/PER)-1,page+1);return;
