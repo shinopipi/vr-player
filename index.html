@@ -100,7 +100,7 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border-radius:50%;bac
 
 <div id="ui">
   <header class="top">
-    <div class="brand">ゴーグル3Dプレーヤー <span style="font-size:11px;color:var(--muted);font-weight:500">ver 1.7</span><small id="fname">デモ映像を表示中</small></div>
+    <div class="brand">ゴーグル3Dプレーヤー <span style="font-size:11px;color:var(--muted);font-weight:500">ver 1.8</span><small id="fname">デモ映像を表示中</small></div>
     <label class="btn primary" for="file">動画を選ぶ</label>
     <input class="vh" type="file" id="file" accept="video/mp4,.mp4,.m4v,.mov,video/*" multiple>
   </header>
@@ -489,7 +489,7 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border-radius:50%;bac
   }
 
   // ---- panel texture drawing ----
-  const FG='#eef2f6',MUTED='#9aa6b2',ACC='#7cc7ff',TRACK='#3a4250';
+  const FG='#ffffff',MUTED='#d5dce3',ACC='#7cc7ff',TRACK='#3a4250';
   const JP='"Hiragino Sans","Hiragino Kaku Gothic ProN",sans-serif';
   function rr(c,x,y,w,h,r){c.beginPath();c.moveTo(x+r,y);c.arcTo(x+w,y,x+w,y+h,r);c.arcTo(x+w,y+h,x,y+h,r);c.arcTo(x,y+h,x,y,r);c.arcTo(x,y,x+w,y,r);c.closePath()}
   function ring(c,x,y,r,f){c.strokeStyle=ACC;c.lineWidth=7;c.beginPath();c.arc(x,y,r,-Math.PI/2,-Math.PI/2+clamp01(f)*Math.PI*2);c.stroke()}
@@ -517,15 +517,15 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border-radius:50%;bac
     const regs=listRegions();
     c.textAlign='left';c.fillStyle=FG;c.font=`700 30px ${JP}`;
     const lb=regs[0],lh=hoverId==='lback';
-    rr(c,lb.x,lb.y,lb.w,lb.h,18);c.fillStyle=lh?'rgba(124,199,255,0.18)':'rgba(255,255,255,0.06)';c.fill();c.strokeStyle=lh?ACC:'rgba(238,242,246,0.4)';c.lineWidth=3;c.stroke();
+    rr(c,lb.x,lb.y,lb.w,lb.h,18);if(lh){c.fillStyle='rgba(124,199,255,0.22)';c.fill()}c.strokeStyle=lh?ACC:FG;c.lineWidth=3;c.stroke();
     c.fillStyle=FG;c.fillText('‹ 戻る',lb.x+40,lb.y+lb.h/2);
     if(lh){c.fillStyle=ACC;c.fillRect(lb.x+14,lb.y+lb.h-10,(lb.w-28)*clamp01(hoverT/DWELL),5)}
     c.textAlign='center';c.font=`700 32px ${JP}`;c.fillText(`動画一覧（${lib.length}本）`,600,55);
     for(const g of regs){
       if(g.vid===undefined){
         if(g.id==='lback')continue;
-        const hov=hoverId===g.id;c.beginPath();c.arc(g.cx,g.cy,g.r,0,Math.PI*2);c.fillStyle=hov?'rgba(124,199,255,0.18)':'rgba(255,255,255,0.06)';c.fill();
-        c.strokeStyle=hov?ACC:'rgba(238,242,246,0.4)';c.lineWidth=3;c.stroke();
+        const hov=hoverId===g.id;c.beginPath();c.arc(g.cx,g.cy,g.r,0,Math.PI*2);if(hov){c.fillStyle='rgba(124,199,255,0.22)';c.fill()}
+        c.strokeStyle=hov?ACC:FG;c.lineWidth=3;c.stroke();
         if(g.id==='close')icon(c,'close',g.cx,g.cy,g.r);
         else{c.save();c.translate(g.cx,g.cy);c.strokeStyle=FG;c.lineWidth=5;c.lineCap='round';c.beginPath();const d=g.id==='prev'?1:-1;c.moveTo(d*8,-14);c.lineTo(-d*8,0);c.lineTo(d*8,14);c.stroke();c.restore()}
         if(hov)ring(c,g.cx,g.cy,g.r+9,hoverT/DWELL);
@@ -547,7 +547,8 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border-radius:50%;bac
   }
   function drawPanel(){
     const c=px;c.clearRect(0,0,CW,CH);
-    rr(c,4,4,CW-8,CH-8,40);c.fillStyle='rgba(12,14,18,0.86)';c.fill();c.strokeStyle='rgba(255,255,255,0.10)';c.lineWidth=2;c.stroke();
+    // no backdrop: controls float directly over the video, with a soft shadow for legibility
+    c.shadowColor='rgba(0,0,0,0.9)';c.shadowBlur=12;c.shadowOffsetY=2;
     c.textBaseline='middle';
     if(panelView==='list'){drawList(c);if(gazeUV){c.beginPath();c.arc(gazeUV[0],gazeUV[1],9,0,Math.PI*2);c.fillStyle='#fff';c.fill();c.lineWidth=3;c.strokeStyle='rgba(0,0,0,.6)';c.stroke()}return}
     // zoom & eye-distance sliders
@@ -559,8 +560,8 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border-radius:50%;bac
       if(g.w)continue;
       const hov=hoverId===g.id;
       c.beginPath();c.arc(g.cx,g.cy,g.r,0,Math.PI*2);
-      c.fillStyle=hov?'rgba(124,199,255,0.18)':(g.cy===BY?'rgba(255,255,255,0.06)':'rgba(0,0,0,0)');c.fill();
-      if(g.cy===BY||hov){c.strokeStyle=hov?ACC:'rgba(238,242,246,0.55)';c.lineWidth=3;c.stroke()}
+      if(hov){c.fillStyle='rgba(124,199,255,0.22)';c.fill()}
+      if(g.id==='play'||hov){c.strokeStyle=hov?ACC:FG;c.lineWidth=g.id==='play'?5:3;c.stroke()}
       icon(c,g.id,g.cx,g.cy,g.r);
       if(hov&&!g.cont)ring(c,g.cx,g.cy,g.r+10,hoverT/DWELL);
       if(g.cy===BY){c.fillStyle=FG;c.font=`600 25px ${JP}`;c.textAlign='center';
