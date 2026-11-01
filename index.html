@@ -103,7 +103,7 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border-radius:50%;bac
 
 <div id="ui" class="compact">
   <header class="top">
-    <div class="brand">ゴーグル3Dプレーヤー <span style="font-size:11px;color:var(--muted);font-weight:500">ver 2.3</span><small id="fname">デモ映像を表示中</small></div>
+    <div class="brand">ゴーグル3Dプレーヤー <span style="font-size:11px;color:var(--muted);font-weight:500">ver 2.4</span><small id="fname">デモ映像を表示中</small></div>
     <label class="btn primary" for="file">動画を選ぶ</label>
     <input class="vh" type="file" id="file" accept="video/mp4,.mp4,.m4v,.mov,video/*" multiple>
   </header>
@@ -402,7 +402,7 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border-radius:50%;bac
   // ---------- 3D gaze panel (look up 2s to open, look 5s to select) ----------
   const hud=document.createElement('canvas');hud.id='hud';cv.after(hud);
   const hx=hud.getContext('2d');
-  const D2R=Math.PI/180, RIGHT_YAW=60*D2R, RIGHT_PITCH=35*D2R, UP_TIME=2, DWELL=2, AWAY_CLOSE=8;
+  const D2R=Math.PI/180, RIGHT_YAW=60*D2R, RIGHT_PITCH=35*D2R, UP_TIME=1, DWELL=2, AWAY_CLOSE=8;
   const PD=2.0, PHW=1.15, PHH=0.69, EYE_OFF=0.032, CW=1200, CH=720;
   const pc=document.createElement('canvas');pc.width=CW;pc.height=CH;const px=pc.getContext('2d');
   let panelOpen=false, upT=0, pYaw=0, pPitch=0, hoverId=null, hoverT=0, awayT=0, repeatT=0, gazeUV=null, seekFrac=0, flashMsg='', flashT=0;
