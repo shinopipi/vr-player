@@ -103,7 +103,7 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border-radius:50%;bac
 
 <div id="ui" class="compact">
   <header class="top">
-    <div class="brand">ゴーグル3Dプレーヤー <span style="font-size:11px;color:var(--muted);font-weight:500">ver 2.1</span><small id="fname">デモ映像を表示中</small></div>
+    <div class="brand">ゴーグル3Dプレーヤー <span style="font-size:11px;color:var(--muted);font-weight:500">ver 2.2</span><small id="fname">デモ映像を表示中</small></div>
     <label class="btn primary" for="file">動画を選ぶ</label>
     <input class="vh" type="file" id="file" accept="video/mp4,.mp4,.m4v,.mov,video/*" multiple>
   </header>
@@ -410,6 +410,7 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border-radius:50%;bac
   const dot=(a,b)=>a[0]*b[0]+a[1]*b[1]+a[2]*b[2];
   const cross=(a,b)=>[a[1]*b[2]-a[2]*b[1],a[2]*b[0]-a[0]*b[2],a[0]*b[1]-a[1]*b[0]];
   const clamp01=x=>Math.max(0,Math.min(1,x));
+  let rcTimer=null;
   function flash(m){flashMsg=m;flashT=1.6}
   function basis(){const n=dirOf(pYaw,pPitch),r=[Math.cos(pYaw),0,-Math.sin(pYaw)],u=cross(r,n);return{n,r,u,c:[n[0]*PD,n[1]*PD,n[2]*PD]}}
   function recenter(){
@@ -454,7 +455,13 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border-radius:50%;bac
       case'lback':panelView='main';return;
       case'prev':page=Math.max(0,page-1);return;
       case'next':page=Math.min(Math.ceil(lib.length/PER)-1,page+1);return;
-      case'recenter':recenter();pYaw=0;pPitch=-6*D2R;flash('正面に戻しました');return;
+      case'recenter':{
+        panelOpen=false;panelView='main';clearInterval(rcTimer);
+        let n=3;flash('3秒後、今向いている方向を正面にします');flashT=1.1;
+        rcTimer=setInterval(()=>{n--;
+          if(n>0){flashMsg=`正面を合わせます… ${n}`;flashT=1.1;return}
+          clearInterval(rcTimer);recenter();pYaw=0;pPitch=-6*D2R;flash('ここを正面にしました');
+        },1000);return}
       case'back':case'fwd':
         if(!hasVideo){flash('動画が選ばれていません');return}
         v.currentTime=Math.max(0,Math.min((v.duration||0)-0.5,v.currentTime+(id==='fwd'?10:-10)));return;
