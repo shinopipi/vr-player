@@ -103,7 +103,7 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border-radius:50%;bac
 
 <div id="ui" class="compact">
   <header class="top">
-    <div class="brand">ゴーグル3Dプレーヤー <span style="font-size:11px;color:var(--muted);font-weight:500">ver 3.2</span><small id="fname">デモ映像を表示中</small></div>
+    <div class="brand">ゴーグル3Dプレーヤー <span style="font-size:11px;color:var(--muted);font-weight:500">ver 3.3</span><small id="fname">デモ映像を表示中</small></div>
     <label class="btn primary" for="file">動画を選ぶ</label>
     <input class="vh" type="file" id="file" accept="video/mp4,.mp4,.m4v,.mov,video/*" multiple>
   </header>
@@ -348,7 +348,17 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border-radius:50%;bac
     v.addEventListener('loadeddata',()=>{if(!autoplay){try{v.currentTime=0.01}catch(_){}}},{once:true});
     if(autoplay){v.muted=false;v.play().catch(()=>{if(typeof flash==='function')flash('画面をタップして再生してください')})}
   }
-  v.addEventListener('error',()=>{if(!hasVideo)return;toast('この動画は再生できませんでした。別のMP4をお試しください',5000)});
+  v.addEventListener('error',async()=>{
+    if(!hasVideo)return;
+    const code=v.error?v.error.code:0, it=lib[curIdx]||{};
+    const why={1:'中断',2:'通信エラー',3:'デコードできない形式',4:'対応していない形式'}[code]||'不明';
+    let extra='';
+    if(it.cloud){
+      try{const r=await fetch(it.url,{headers:{Range:'bytes=0-1'}});extra=` / サーバー応答 ${r.status} ${r.headers.get('content-type')||''} ${r.headers.get('content-range')||''}`}
+      catch(e){extra=' / サーバーに接続できません'}
+    }
+    toast(`再生できませんでした（${why}・コード${code}${extra}）`,0);
+  });
   v.addEventListener('ended',()=>{if(!S.loop&&lib.length>1&&curIdx<lib.length-1)loadVideo(curIdx+1,true)});
   const tv=document.createElement('video');tv.muted=true;tv.playsInline=true;tv.setAttribute('playsinline','');tv.preload='auto';
   function once(el,ev,ms){return new Promise(res=>{const t=setTimeout(()=>res(false),ms);el.addEventListener(ev,()=>{clearTimeout(t);res(true)},{once:true})})}
