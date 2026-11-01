@@ -103,7 +103,7 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border-radius:50%;bac
 
 <div id="ui" class="compact">
   <header class="top">
-    <div class="brand">ゴーグル3Dプレーヤー <span style="font-size:11px;color:var(--muted);font-weight:500">ver 3.5</span><small id="fname">デモ映像を表示中</small></div>
+    <div class="brand">ゴーグル3Dプレーヤー <span style="font-size:11px;color:var(--muted);font-weight:500">ver 3.6</span><small id="fname">デモ映像を表示中</small></div>
     <label class="btn primary" for="file">動画を選ぶ</label>
     <input class="vh" type="file" id="file" accept="video/mp4,.mp4,.m4v,.mov,video/*" multiple>
   </header>
@@ -495,7 +495,7 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border-radius:50%;bac
   const hud=document.createElement('canvas');hud.id='hud';cv.after(hud);
   const hx=hud.getContext('2d');
   const D2R=Math.PI/180, RIGHT_YAW=60*D2R, RIGHT_PITCH=35*D2R, UP_TIME=1, DWELL=1.5, AWAY_CLOSE=1.5;
-  const PD=2.0, PHW=1.15, PHH=0.69, EYE_OFF=0.032, CW=1200, CH=720;
+  const PD=2.0, PHW=1.15, PHH=0.69, EYE_OFF=0.010, CW=1200, CH=720;
   const pc=document.createElement('canvas');pc.width=CW;pc.height=CH;const px=pc.getContext('2d');
   let panelOpen=false, upT=0, pYaw=0, pPitch=0, hoverId=null, hoverT=0, awayT=0, repeatT=0, gazeUV=null, seekFrac=0, flashMsg='', flashT=0;
   const dirOf=(yw,pt)=>[-Math.sin(yw)*Math.cos(pt),Math.sin(pt),-Math.cos(yw)*Math.cos(pt)];
@@ -728,8 +728,9 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border-radius:50%;bac
   const U2={};['pc','pr','pu','eyePos','rot','f','aspect','t'].forEach(n=>U2[n]=gl.getUniformLocation(prog2,n));
   const aq=gl.getAttribLocation(prog2,'q');
   const qbuf=gl.createBuffer();gl.bindBuffer(gl.ARRAY_BUFFER,qbuf);gl.bufferData(gl.ARRAY_BUFFER,new Float32Array([0,0,1,0,0,1,1,1]),gl.STATIC_DRAW);
+  const pc2=document.createElement('canvas');pc2.width=2048;pc2.height=1024;const px2=pc2.getContext('2d');
   const ptex=gl.createTexture();gl.activeTexture(gl.TEXTURE1);gl.bindTexture(gl.TEXTURE_2D,ptex);
-  gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,gl.LINEAR);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MAG_FILTER,gl.LINEAR);
+  gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,gl.LINEAR_MIPMAP_LINEAR);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MAG_FILTER,gl.LINEAR);
   gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_S,gl.CLAMP_TO_EDGE);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_T,gl.CLAMP_TO_EDGE);
   gl.activeTexture(gl.TEXTURE0);gl.bindTexture(gl.TEXTURE_2D,tex);
   gl.blendFunc(gl.SRC_ALPHA,gl.ONE_MINUS_SRC_ALPHA);
@@ -744,7 +745,7 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border-radius:50%;bac
     if(hud.width!==W||hud.height!==H){hud.width=W;hud.height=H}
     updateGaze(dt,R);
     drawHud(half,H);
-    if(panelOpen&&(panelTick++%2===0)){drawPanel();gl.activeTexture(gl.TEXTURE1);gl.bindTexture(gl.TEXTURE_2D,ptex);gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,gl.RGBA,gl.UNSIGNED_BYTE,pc);gl.activeTexture(gl.TEXTURE0)}
+    if(panelOpen&&(panelTick++%2===0)){drawPanel();gl.activeTexture(gl.TEXTURE1);gl.bindTexture(gl.TEXTURE_2D,ptex);px2.clearRect(0,0,2048,1024);px2.drawImage(pc,0,0,2048,1024);gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,gl.RGBA,gl.UNSIGNED_BYTE,pc2);gl.generateMipmap(gl.TEXTURE_2D);gl.activeTexture(gl.TEXTURE0)}
     const Rf=new Float32Array(R);
     for(let e=0;e<2;e++){
       const x0=e*half,shift=(e===0?1:-1)*S.ipd*dpr;
