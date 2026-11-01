@@ -1,0 +1,367 @@
+<!doctype html><html lang="ja"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="3Dプレーヤー">
+<style>:root{padding:0}body{margin:0}[hidden]{display:none!important}</style>
+</head><body>
+<title>ゴーグル3Dプレーヤー</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Zen+Kaku+Gothic+New:wght@500;700&family=JetBrains+Mono:wght@500&display=swap">
+<style>
+/* Layout: full-bleed black stage, two eye viewports rendered by WebGL; controls float over it and hide on tap */
+:root{
+  --bg:#050607;
+  --panel:rgba(14,17,21,.92);
+  --line:#2a323b;
+  --fg:#e8edf2;
+  --muted:#8e9aa6;
+  --accent:#7cc7ff;
+  --accent-ink:#04121d;
+  --font-ui:"Zen Kaku Gothic New","Hiragino Sans","Hiragino Kaku Gothic ProN",system-ui,sans-serif;
+  --font-num:"JetBrains Mono",ui-monospace,Menlo,monospace;
+  color-scheme:dark;
+}
+html,body{height:100%;background:var(--bg);color:var(--fg);overflow:hidden}
+body{font-family:var(--font-ui);-webkit-user-select:none;user-select:none}
+#stage{position:fixed;inset:0;width:100%;height:100%;display:block;background:#000;touch-action:none}
+#vid{position:fixed;left:0;top:0;width:2px;height:2px;opacity:.01;pointer-events:none}
+.vh{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+
+#ui{position:fixed;inset:0;pointer-events:none;display:flex;flex-direction:column;justify-content:space-between;transition:opacity .25s}
+#ui.off{opacity:0}
+#ui.off *{pointer-events:none!important}
+.top,.panel{pointer-events:auto}
+
+.top{display:flex;align-items:center;gap:12px;
+  padding-top:calc(env(safe-area-inset-top,0px) + 10px);padding-bottom:10px;
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));
+  background:linear-gradient(var(--bg),transparent)}
+.brand{font-weight:700;font-size:15px;letter-spacing:.04em;flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.brand small{display:block;font-weight:500;font-size:11px;color:var(--muted);letter-spacing:.02em;overflow:hidden;text-overflow:ellipsis}
+
+.btn{font:inherit;font-size:13px;font-weight:700;border:1px solid var(--line);background:#161b21;color:var(--fg);
+  border-radius:10px;padding:8px 12px;cursor:pointer;white-space:nowrap}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+.btn.on{border-color:var(--accent);color:var(--accent)}
+.btn:focus-visible,.seg button:focus-visible,.play:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+
+.toast{align-self:center;pointer-events:none;background:var(--panel);border:1px solid var(--line);border-radius:12px;
+  padding:8px 14px;font-size:13px;color:var(--fg);max-width:calc(100% - 32px);text-align:center;line-height:1.5}
+
+.panel{margin:0 auto;width:100%;max-width:820px;background:var(--panel);border-top:1px solid var(--line);
+  -webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px);
+  padding-top:12px;padding-bottom:calc(env(safe-area-inset-bottom,0px) + 12px);
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));
+  display:grid;gap:10px;max-height:66vh;overflow-y:auto}
+@media (min-width:840px){.panel{border:1px solid var(--line);border-radius:14px;margin-bottom:12px}}
+
+.transport{display:flex;align-items:center;gap:10px}
+.play{width:44px;height:44px;border-radius:50%;border:none;background:var(--accent);color:var(--accent-ink);
+  display:grid;place-items:center;cursor:pointer;flex:none}
+.play svg{width:18px;height:18px;fill:currentColor}
+.time{font-family:var(--font-num);font-size:12px;color:var(--muted);font-variant-numeric:tabular-nums;flex:none}
+input[type=range]{-webkit-appearance:none;appearance:none;flex:1;min-width:0;height:28px;background:transparent}
+input[type=range]::-webkit-slider-runnable-track{height:4px;border-radius:2px;background:var(--line)}
+input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:20px;height:20px;border-radius:50%;background:var(--fg);margin-top:-8px}
+input[type=range]::-moz-range-track{height:4px;border-radius:2px;background:var(--line)}
+input[type=range]::-moz-range-thumb{width:20px;height:20px;border-radius:50%;background:var(--fg);border:none}
+
+.row{display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px}
+.label{font-size:12px;color:var(--muted);letter-spacing:.06em;min-width:4.5em}
+.seg{display:inline-flex;border:1px solid var(--line);border-radius:10px;overflow:hidden}
+.seg button{font:inherit;font-size:13px;font-weight:700;background:transparent;color:var(--muted);border:none;padding:7px 11px;cursor:pointer}
+.seg button+button{border-left:1px solid var(--line)}
+.seg button[aria-pressed=true]{background:var(--fg);color:var(--bg)}
+
+.sliders{display:grid;grid-template-columns:1fr 1fr;gap:4px 20px}
+@media (max-width:520px){.sliders{grid-template-columns:1fr}}
+.sl{display:flex;align-items:center;gap:10px;min-width:0}
+.val{font-family:var(--font-num);font-size:12px;width:3.6em;text-align:right;font-variant-numeric:tabular-nums}
+
+.chip{position:relative}
+.chip input{position:absolute;opacity:0;width:1px;height:1px}
+.chip span{display:inline-block;font-size:13px;font-weight:700;border:1px solid var(--line);border-radius:999px;padding:6px 11px;color:var(--muted);cursor:pointer}
+.chip input:checked+span{border-color:var(--accent);color:var(--accent)}
+.chip input:focus-visible+span{outline:2px solid var(--accent);outline-offset:2px}
+.note{font-size:12px;color:var(--muted);line-height:1.6;margin:0}
+@media (prefers-reduced-motion:reduce){#ui{transition:none}}
+</style>
+
+<canvas id="stage" aria-label="左右の目用のVR映像"></canvas>
+<video id="vid" playsinline webkit-playsinline preload="auto"></video>
+
+<div id="ui">
+  <header class="top">
+    <div class="brand">ゴーグル3Dプレーヤー<small id="fname">デモ映像を表示中</small></div>
+    <label class="btn primary" for="file">動画を選ぶ</label>
+    <input class="vh" type="file" id="file" accept="video/mp4,.mp4,.m4v,.mov,video/*">
+  </header>
+
+  <div class="toast" id="toast">iPhoneを横向きにして、画面をドラッグすると見回せます</div>
+
+  <section class="panel" aria-label="操作">
+    <div class="transport">
+      <button class="play" id="play" aria-label="再生"><svg viewBox="0 0 24 24" id="playIcon"><path d="M7 4l13 8-13 8z"/></svg></button>
+      <span class="time" id="cur">0:00</span>
+      <input type="range" id="seek" min="0" max="1000" value="0" aria-label="再生位置">
+      <span class="time" id="dur">0:00</span>
+      <button class="btn primary" id="vr">VRで見る</button>
+    </div>
+
+    <div class="row">
+      <span class="label">映像の種類</span>
+      <div class="seg" role="group" aria-label="映像の種類">
+        <button data-proj="eq180">VR180</button>
+        <button data-proj="eq360">VR360</button>
+        <button data-proj="fish">魚眼180</button>
+        <button data-proj="flat">平面</button>
+      </div>
+    </div>
+    <div class="row">
+      <span class="label">左右の並び</span>
+      <div class="seg" role="group" aria-label="左右の並び">
+        <button data-lay="sbs">左右 SBS</button>
+        <button data-lay="tb">上下 TB</button>
+        <button data-lay="mono">2D</button>
+      </div>
+    </div>
+
+    <div class="sliders">
+      <div class="sl"><span class="label">視野の広さ</span><input type="range" id="fov" min="60" max="130" value="100"><span class="val" id="fovV">100°</span></div>
+      <div class="sl"><span class="label">目の間隔</span><input type="range" id="ipd" min="-60" max="60" value="0"><span class="val" id="ipdV">0</span></div>
+    </div>
+
+    <div class="row">
+      <button class="btn" id="gyro">頭の動きで見回す</button>
+      <button class="btn" id="center">正面に戻す</button>
+      <label class="chip"><input type="checkbox" id="swap"><span>左右入れ替え</span></label>
+      <label class="chip"><input type="checkbox" id="divider" checked><span>仕切り線</span></label>
+      <label class="chip"><input type="checkbox" id="loop"><span>リピート</span></label>
+      <button class="btn" id="fs">全画面</button>
+      <button class="btn" id="hide">操作を隠す</button>
+    </div>
+    <p class="note">画面をドラッグで見回し、タップで操作パネルの表示切替。左右が逆に見えるときは「左右入れ替え」、ゆがんで見えるときは「映像の種類」を切り替えてください。</p>
+  </section>
+</div>
+
+<script>
+(function(){
+  const $=id=>document.getElementById(id);
+  const cv=$('stage'), v=$('vid'), ui=$('ui');
+  const S={proj:'eq180',lay:'sbs',fov:100,ipd:0,swap:false,divider:true,loop:false};
+  try{Object.assign(S,JSON.parse(localStorage.getItem('goggle3d.v2')||'{}'))}catch(e){}
+  const save=()=>{try{localStorage.setItem('goggle3d.v2',JSON.stringify(S))}catch(e){}};
+
+  let toastTimer=null;
+  function toast(msg,ms){const t=$('toast');t.textContent=msg;t.hidden=false;clearTimeout(toastTimer);if(ms)toastTimer=setTimeout(()=>t.hidden=true,ms)}
+  toast('iPhoneを横向きにして、画面をドラッグすると見回せます',6000);
+
+  // ---------- WebGL ----------
+  const gl=cv.getContext('webgl',{antialias:false,alpha:false});
+  if(!gl){toast('この端末ではWebGLが使えないため表示できません');return}
+  const VS='attribute vec2 p;void main(){gl_Position=vec4(p,0.,1.);}';
+  const FS=`precision highp float;
+  uniform sampler2D tex;uniform vec2 res;uniform vec2 origin;uniform mat3 rot;uniform float tanHalf;
+  uniform float eye;uniform int proj;uniform int lay;uniform float srcAspect;
+  const float PI=3.14159265;
+  void main(){
+    vec2 p=(gl_FragCoord.xy-origin)/res*2.0-1.0;
+    float aspect=res.x/res.y;
+    vec3 d=normalize(rot*vec3(p.x*tanHalf*aspect,p.y*tanHalf,-1.0));
+    vec2 uv=vec2(0.0);bool ok=true;
+    if(proj==0){float lon=atan(d.x,-d.z);float lat=asin(clamp(d.y,-1.,1.));ok=abs(lon)<=PI*0.5;uv=vec2(lon/PI+0.5,lat/PI+0.5);}
+    else if(proj==1){float lon=atan(d.x,-d.z);float lat=asin(clamp(d.y,-1.,1.));uv=vec2(lon/(2.0*PI)+0.5,lat/PI+0.5);}
+    else if(proj==2){float th=acos(clamp(-d.z,-1.,1.));ok=th<=PI*0.5;float r=th/PI;float ph=atan(d.y,d.x);uv=vec2(0.5+r*cos(ph),0.5+r*sin(ph));}
+    else{ok=d.z<-0.01;float t=-1.0/d.z;float W=1.8;float H=W/srcAspect;uv=vec2(d.x*t/W+0.5,d.y*t/H+0.5);ok=ok&&uv.x>=0.&&uv.x<=1.&&uv.y>=0.&&uv.y<=1.;}
+    float u=uv.x,v=1.0-uv.y;
+    if(lay==0){u=(clamp(u,0.001,0.999)+eye)*0.5;}else if(lay==1){v=(clamp(v,0.001,0.999)+eye)*0.5;}
+    gl_FragColor=ok?texture2D(tex,vec2(u,v)):vec4(0.,0.,0.,1.);
+  }`;
+  function sh(type,src){const s=gl.createShader(type);gl.shaderSource(s,src);gl.compileShader(s);if(!gl.getShaderParameter(s,gl.COMPILE_STATUS))throw gl.getShaderInfoLog(s);return s}
+  const prog=gl.createProgram();gl.attachShader(prog,sh(gl.VERTEX_SHADER,VS));gl.attachShader(prog,sh(gl.FRAGMENT_SHADER,FS));gl.linkProgram(prog);gl.useProgram(prog);
+  const buf=gl.createBuffer();gl.bindBuffer(gl.ARRAY_BUFFER,buf);gl.bufferData(gl.ARRAY_BUFFER,new Float32Array([-1,-1,1,-1,-1,1,1,1]),gl.STATIC_DRAW);
+  const ap=gl.getAttribLocation(prog,'p');gl.enableVertexAttribArray(ap);gl.vertexAttribPointer(ap,2,gl.FLOAT,false,0,0);
+  const U={};['tex','res','origin','rot','tanHalf','eye','proj','lay','srcAspect'].forEach(n=>U[n]=gl.getUniformLocation(prog,n));
+  const tex=gl.createTexture();gl.bindTexture(gl.TEXTURE_2D,tex);
+  gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,gl.LINEAR);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MAG_FILTER,gl.LINEAR);
+  gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_S,gl.CLAMP_TO_EDGE);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_T,gl.CLAMP_TO_EDGE);
+  gl.uniform1i(U.tex,0);gl.enable(gl.SCISSOR_TEST);
+
+  // ---------- demo texture: VR180 side-by-side test scene ----------
+  const demo=document.createElement('canvas');demo.width=1440;demo.height=720;
+  (function drawDemo(){
+    const c=demo.getContext('2d');
+    const orbs=[];for(let i=0;i<16;i++)orbs.push({lon:-70+((i*53)%140),lat:-30+((i*37)%60),z:0.6+((i*0.29)%1)*2,h:190+((i*41)%90)});
+    orbs.sort((a,b)=>b.z-a.z);
+    for(let e=0;e<2;e++){
+      const x0=e*720;
+      const g=c.createLinearGradient(0,0,0,720);g.addColorStop(0,'#14324a');g.addColorStop(.5,'#0c1720');g.addColorStop(.5,'#151515');g.addColorStop(1,'#303030');
+      c.fillStyle=g;c.fillRect(x0,0,720,720);
+      c.strokeStyle='rgba(124,199,255,.35)';c.lineWidth=1.5;
+      for(let lon=-90;lon<=90;lon+=15){const x=x0+(lon/180+.5)*720;c.beginPath();c.moveTo(x,0);c.lineTo(x,720);c.stroke()}
+      for(let lat=-75;lat<=75;lat+=15){const y=(.5-lat/180)*720;c.beginPath();c.moveTo(x0,y);c.lineTo(x0+720,y);c.stroke()}
+      const sign=e===0?1:-1;
+      for(const o of orbs){
+        const disp=sign*14*(1/o.z-0.5);
+        const x=x0+(o.lon/180+.5)*720+disp, y=(.5-o.lat/180)*720, r=26/o.z;
+        const gg=c.createRadialGradient(x-r*.35,y-r*.35,r*.1,x,y,r);gg.addColorStop(0,`hsl(${o.h} 90% 80%)`);gg.addColorStop(1,`hsl(${o.h} 70% 30%)`);
+        c.fillStyle=gg;c.beginPath();c.arc(x,y,r,0,Math.PI*2);c.fill();
+      }
+      c.fillStyle='#e8edf2';c.textAlign='center';c.font='700 34px "Hiragino Sans",sans-serif';
+      c.fillText('デモ映像',x0+360,400);c.font='500 20px "Hiragino Sans",sans-serif';c.fillText('ドラッグで見回せます',x0+360,432);
+    }
+  })();
+  gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,gl.RGBA,gl.UNSIGNED_BYTE,demo);
+
+  let dpr=1;
+  function resize(){dpr=Math.min(window.devicePixelRatio||1,2);cv.width=Math.round(innerWidth*dpr);cv.height=Math.round(innerHeight*dpr)}
+  addEventListener('resize',resize);resize();
+
+  // ---------- view direction ----------
+  let yaw=0,pitch=0,gyroOn=false,gq=null,yawOffset=0;
+  function matYawPitch(y,p){const cy=Math.cos(y),sy=Math.sin(y),cp=Math.cos(p),sp=Math.sin(p);
+    // R = Ry(y)*Rx(p); column-major
+    return [cy,0,-sy, sy*sp,cp,cy*sp, sy*cp,-sp,cy*cp];}
+  function qmul(a,b){return[a[3]*b[0]+a[0]*b[3]+a[1]*b[2]-a[2]*b[1],a[3]*b[1]-a[0]*b[2]+a[1]*b[3]+a[2]*b[0],a[3]*b[2]+a[0]*b[1]-a[1]*b[0]+a[2]*b[3],a[3]*b[3]-a[0]*b[0]-a[1]*b[1]-a[2]*b[2]]}
+  function qmat(q){const[x,y,z,w]=q;return[1-2*(y*y+z*z),2*(x*y+z*w),2*(x*z-y*w), 2*(x*y-z*w),1-2*(x*x+z*z),2*(y*z+x*w), 2*(x*z+y*w),2*(y*z-x*w),1-2*(x*x+y*y)]}
+  function mmul(a,b){const r=new Array(9);for(let c=0;c<3;c++)for(let rr=0;rr<3;rr++){let s=0;for(let k=0;k<3;k++)s+=a[k*3+rr]*b[c*3+k];r[c*3+rr]=s}return r}
+  function screenAngle(){return((screen.orientation&&screen.orientation.angle)||window.orientation||0)*Math.PI/180}
+  function onOrient(ev){
+    if(ev.alpha==null)return;
+    const D=Math.PI/180,x=ev.beta*D,y=ev.alpha*D,z=-ev.gamma*D;
+    const c1=Math.cos(x/2),c2=Math.cos(y/2),c3=Math.cos(z/2),s1=Math.sin(x/2),s2=Math.sin(y/2),s3=Math.sin(z/2);
+    let q=[s1*c2*c3+c1*s2*s3,c1*s2*c3-s1*c2*s3,c1*c2*s3-s1*s2*c3,c1*c2*c3+s1*s2*s3];
+    q=qmul(q,[-Math.SQRT1_2,0,0,Math.SQRT1_2]);
+    const o=-screenAngle()/2;q=qmul(q,[0,0,Math.sin(o),Math.cos(o)]);
+    gq=q;
+  }
+  function headingOf(m){return Math.atan2(-m[6],-m[8])} // yaw of forward vector
+  function currentRot(){
+    if(gyroOn&&gq){const g=qmat(gq);return mmul(matYawPitch(yawOffset,0),g)}
+    return matYawPitch(yaw,pitch);
+  }
+  $('center').addEventListener('click',()=>{
+    if(gyroOn&&gq){const g=qmat(gq);const f=[-g[6],-g[7],-g[8]];yawOffset=-Math.atan2(-f[0],-f[2])}
+    else{yaw=0;pitch=0}
+  });
+
+  const NO_SENSOR='このページでは傾きセンサーが使えません。Safariで開いた版（https）でお使いください';
+  function startGyro(){
+    return new Promise(async resolve=>{
+      if(gyroOn)return resolve(true);
+      let granted=true;
+      try{if(typeof DeviceOrientationEvent!=='undefined'&&typeof DeviceOrientationEvent.requestPermission==='function'){granted=(await DeviceOrientationEvent.requestPermission())==='granted'}}catch(e){granted=false}
+      if(!granted){toast(NO_SENSOR,6000);return resolve(false)}
+      gq=null;addEventListener('deviceorientation',onOrient);
+      setTimeout(()=>{
+        if(!gq){removeEventListener('deviceorientation',onOrient);toast(NO_SENSOR,6000);return resolve(false)}
+        gyroOn=true;$('gyro').classList.add('on');$('gyro').textContent='頭の動き：オン';
+        const g=qmat(gq);const f=[-g[6],-g[7],-g[8]];yawOffset=-Math.atan2(-f[0],-f[2]);
+        resolve(true);
+      },800);
+    });
+  }
+  $('gyro').addEventListener('click',()=>{
+    if(gyroOn){gyroOn=false;removeEventListener('deviceorientation',onOrient);$('gyro').classList.remove('on');$('gyro').textContent='頭の動きで見回す';return}
+    startGyro();
+  });
+  $('vr').addEventListener('click',async()=>{
+    if(hasVideo&&v.paused){v.muted=false;v.play().then(lockWake).catch(()=>{})}
+    const ok=await startGyro();
+    if(ok){toast('正面を向いた状態で始まります。見失ったら画面をタップ→「正面に戻す」',4000);setTimeout(()=>showUI(false),1200)}
+  });
+
+  // ---------- drag & tap ----------
+  let drag=null;
+  cv.addEventListener('pointerdown',e=>{drag={x:e.clientX,y:e.clientY,moved:false};cv.setPointerCapture(e.pointerId)});
+  cv.addEventListener('pointermove',e=>{
+    if(!drag)return;const dx=e.clientX-drag.x,dy=e.clientY-drag.y;
+    if(!drag.moved&&Math.hypot(dx,dy)<6)return;drag.moved=true;drag.x=e.clientX;drag.y=e.clientY;
+    const k=(S.fov*Math.PI/180)/innerHeight;
+    if(gyroOn)yawOffset+=dx*k;else{yaw+=dx*k;pitch=Math.max(-1.45,Math.min(1.45,pitch+dy*k))}
+  });
+  const endDrag=()=>{if(drag&&!drag.moved)showUI(ui.classList.contains('off'));drag=null};
+  cv.addEventListener('pointerup',endDrag);cv.addEventListener('pointercancel',()=>drag=null);
+
+  // ---------- UI ----------
+  function syncUI(){
+    document.querySelectorAll('[data-proj]').forEach(b=>b.setAttribute('aria-pressed',b.dataset.proj===S.proj));
+    document.querySelectorAll('[data-lay]').forEach(b=>b.setAttribute('aria-pressed',b.dataset.lay===S.lay));
+    $('fov').value=S.fov;$('fovV').textContent=S.fov+'°';
+    $('ipd').value=S.ipd;$('ipdV').textContent=(S.ipd>0?'+':'')+S.ipd;
+    $('swap').checked=S.swap;$('divider').checked=S.divider;$('loop').checked=S.loop;v.loop=S.loop;
+  }
+  syncUI();
+  document.querySelectorAll('[data-proj]').forEach(b=>b.addEventListener('click',()=>{S.proj=b.dataset.proj;syncUI();save()}));
+  document.querySelectorAll('[data-lay]').forEach(b=>b.addEventListener('click',()=>{S.lay=b.dataset.lay;syncUI();save()}));
+  $('fov').addEventListener('input',e=>{S.fov=+e.target.value;syncUI();save()});
+  $('ipd').addEventListener('input',e=>{S.ipd=+e.target.value;syncUI();save()});
+  ['swap','divider','loop'].forEach(k=>$(k).addEventListener('change',e=>{S[k]=e.target.checked;syncUI();save()}));
+
+  let hideTimer=null;
+  function showUI(on){ui.classList.toggle('off',!on);clearTimeout(hideTimer)}
+  function scheduleHide(){clearTimeout(hideTimer);hideTimer=setTimeout(()=>showUI(false),2500)}
+  $('hide').addEventListener('click',()=>showUI(false));
+
+  // ---------- file & transport ----------
+  let hasVideo=false,url=null;
+  $('file').addEventListener('change',e=>{
+    const f=e.target.files&&e.target.files[0];if(!f)return;
+    if(url)URL.revokeObjectURL(url);
+    url=URL.createObjectURL(f);v.src=url;v.load();hasVideo=true;$('fname').textContent=f.name;
+    v.addEventListener('error',()=>{hasVideo=false;$('fname').textContent='この動画は再生できません';toast('この動画は再生できませんでした。別のMP4をお試しください',5000)},{once:true});
+    v.addEventListener('loadeddata',()=>{try{v.currentTime=0.01}catch(_){}},{once:true});
+    toast('再生ボタンを押してください',3000);
+  });
+  const fmt=t=>{if(!isFinite(t))return'0:00';t=Math.floor(t);const h=Math.floor(t/3600),m=Math.floor(t%3600/60),s=t%60;return(h?h+':'+String(m).padStart(2,'0'):m)+':'+String(s).padStart(2,'0')};
+  const setIcon=p=>{$('playIcon').innerHTML=p?'<path d="M6 4h4v16H6zM14 4h4v16h-4z"/>':'<path d="M7 4l13 8-13 8z"/>';$('play').setAttribute('aria-label',p?'一時停止':'再生')};
+  $('play').addEventListener('click',()=>{
+    if(!hasVideo){toast('先に「動画を選ぶ」からMP4を選んでください',3000);return}
+    if(v.paused){v.muted=false;v.play().then(()=>{lockWake();scheduleHide()}).catch(()=>toast('再生できませんでした',3000))}else v.pause();
+  });
+  v.addEventListener('play',()=>setIcon(true));v.addEventListener('pause',()=>setIcon(false));
+  v.addEventListener('loadedmetadata',()=>{$('dur').textContent=fmt(v.duration)});
+  let seeking=false;
+  v.addEventListener('timeupdate',()=>{$('cur').textContent=fmt(v.currentTime);if(!seeking&&v.duration)$('seek').value=v.currentTime/v.duration*1000});
+  $('seek').addEventListener('input',e=>{seeking=true;if(hasVideo&&v.duration){v.currentTime=e.target.value/1000*v.duration;$('cur').textContent=fmt(v.currentTime)}});
+  $('seek').addEventListener('change',()=>{seeking=false});
+
+  const el=document.documentElement,rfs=el.requestFullscreen||el.webkitRequestFullscreen;
+  if(!rfs)$('fs').hidden=true;
+  $('fs').addEventListener('click',()=>{try{const p=rfs.call(el);if(p&&p.catch)p.catch(()=>{$('fs').hidden=true})}catch(e){$('fs').hidden=true}});
+  function lockWake(){try{navigator.wakeLock&&navigator.wakeLock.request('screen').catch(()=>{})}catch(e){}}
+  document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'&&hasVideo&&!v.paused)lockWake()});
+
+  // ---------- render ----------
+  const PROJ={eq180:0,eq360:1,fish:2,flat:3},LAY={sbs:0,tb:1,mono:2};
+  function srcAspect(){
+    const w=hasVideo&&v.videoWidth?v.videoWidth:demo.width,h=hasVideo&&v.videoHeight?v.videoHeight:demo.height;
+    if(S.lay==='sbs'){const a=(w/2)/h;return a<1.2?w/h:a}
+    if(S.lay==='tb'){const a=w/(h/2);return a>2.5?w/h:a}
+    return w/h;
+  }
+  function frame(){
+    if(hasVideo&&v.readyState>=2){try{gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,gl.RGBA,gl.UNSIGNED_BYTE,v)}catch(e){}}
+    const W=cv.width,H=cv.height,half=Math.floor(W/2);
+    gl.uniformMatrix3fv(U.rot,false,new Float32Array(currentRot()));
+    gl.uniform1f(U.tanHalf,Math.tan(S.fov*Math.PI/360));
+    gl.uniform1i(U.proj,PROJ[S.proj]);gl.uniform1i(U.lay,LAY[S.lay]);gl.uniform1f(U.srcAspect,srcAspect());
+    gl.uniform2f(U.res,half,H);
+    for(let e=0;e<2;e++){
+      const x0=e*half,shift=(e===0?1:-1)*S.ipd*dpr;
+      gl.viewport(x0,0,half,H);gl.scissor(x0,0,half,H);
+      gl.uniform2f(U.origin,x0+shift,0);
+      gl.uniform1f(U.eye,S.swap?1-e:e);
+      gl.drawArrays(gl.TRIANGLE_STRIP,0,4);
+    }
+    if(S.divider){gl.viewport(0,0,W,H);gl.scissor(half-dpr,0,2*dpr,H);gl.clearColor(.11,.14,.17,1);gl.clear(gl.COLOR_BUFFER_BIT)}
+    requestAnimationFrame(frame);
+  }
+  requestAnimationFrame(frame);
+})();
+</script>
+
+</body></html>
