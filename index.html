@@ -100,7 +100,7 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border-radius:50%;bac
 
 <div id="ui">
   <header class="top">
-    <div class="brand">ゴーグル3Dプレーヤー <span style="font-size:11px;color:var(--muted);font-weight:500">ver 1.6</span><small id="fname">デモ映像を表示中</small></div>
+    <div class="brand">ゴーグル3Dプレーヤー <span style="font-size:11px;color:var(--muted);font-weight:500">ver 1.7</span><small id="fname">デモ映像を表示中</small></div>
     <label class="btn primary" for="file">動画を選ぶ</label>
     <input class="vh" type="file" id="file" accept="video/mp4,.mp4,.m4v,.mov,video/*" multiple>
   </header>
@@ -145,6 +145,7 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border-radius:50%;bac
       <label class="chip"><input type="checkbox" id="swap"><span>左右入れ替え</span></label>
       <label class="chip"><input type="checkbox" id="divider" checked><span>仕切り線</span></label>
       <label class="chip"><input type="checkbox" id="loop"><span>リピート</span></label>
+      <label class="chip"><input type="checkbox" id="waudio"><span>再生中表示を抑える</span></label>
       <button class="btn" id="fs">全画面</button>
       <button class="btn" id="hide">操作を隠す</button>
     </div>
@@ -156,7 +157,7 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border-radius:50%;bac
 (function(){
   const $=id=>document.getElementById(id);
   const cv=$('stage'), v=$('vid'), ui=$('ui');
-  const S={proj:'eq180',lay:'sbs',fov:100,ipd:0,swap:false,divider:true,loop:false};
+  const S={proj:'eq180',lay:'sbs',fov:100,ipd:0,swap:false,divider:true,loop:false,waudio:true};
   try{Object.assign(S,JSON.parse(localStorage.getItem('goggle3d.v2')||'{}'))}catch(e){}
   const save=()=>{try{localStorage.setItem('goggle3d.v2',JSON.stringify(S))}catch(e){}};
 
@@ -274,6 +275,7 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border-radius:50%;bac
     startGyro();
   });
   $('vr').addEventListener('click',async()=>{
+    audioUnlock();
     if(hasVideo&&v.paused){v.muted=false;v.play().then(lockWake).catch(()=>{})}
     const ok=await startGyro();
     if(ok){toast('正面を向いた状態で始まります。見失ったら画面をタップ→「正面に戻す」',4000);setTimeout(()=>showUI(false),1200)}
@@ -297,7 +299,7 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border-radius:50%;bac
     document.querySelectorAll('[data-lay]').forEach(b=>b.setAttribute('aria-pressed',b.dataset.lay===S.lay));
     $('fov').value=S.fov;$('fovV').textContent=S.fov+'°';
     $('ipd').value=S.ipd;$('ipdV').textContent=(S.ipd>0?'+':'')+S.ipd;
-    $('swap').checked=S.swap;$('divider').checked=S.divider;$('loop').checked=S.loop;v.loop=S.loop;
+    $('swap').checked=S.swap;$('divider').checked=S.divider;$('loop').checked=S.loop;v.loop=S.loop;$('waudio').checked=S.waudio;
   }
   syncUI();
   document.querySelectorAll('[data-proj]').forEach(b=>b.addEventListener('click',()=>{S.proj=b.dataset.proj;syncUI();save()}));
@@ -305,6 +307,17 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border-radius:50%;bac
   $('fov').addEventListener('input',e=>{S.fov=+e.target.value;syncUI();save()});
   $('ipd').addEventListener('input',e=>{S.ipd=+e.target.value;syncUI();save()});
   ['swap','divider','loop'].forEach(k=>$(k).addEventListener('change',e=>{S[k]=e.target.checked;syncUI();save()}));
+  $('waudio').addEventListener('change',e=>{S.waudio=e.target.checked;syncUI();save();toast('アプリを開き直すと切り替わります',4000)});
+  // route sound through Web Audio so iOS is less likely to show the Now Playing activity
+  let actx=null,srcNode=null;
+  function audioUnlock(){
+    if(!S.waudio)return;
+    try{
+      if(!srcNode){const AC=window.AudioContext||window.webkitAudioContext;if(!AC)return;actx=new AC();srcNode=actx.createMediaElementSource(v);srcNode.connect(actx.destination)}
+      if(actx.state!=='running')actx.resume().catch(()=>{});
+    }catch(e){}
+  }
+  try{if('mediaSession' in navigator){navigator.mediaSession.metadata=null}}catch(e){}
 
   let hideTimer=null;
   function showUI(on){ui.classList.toggle('off',!on);clearTimeout(hideTimer)}
@@ -355,6 +368,7 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border-radius:50%;bac
   const setIcon=p=>{$('playIcon').innerHTML=p?'<path d="M6 4h4v16H6zM14 4h4v16h-4z"/>':'<path d="M7 4l13 8-13 8z"/>';$('play').setAttribute('aria-label',p?'一時停止':'再生')};
   $('play').addEventListener('click',()=>{
     if(!hasVideo){toast('先に「動画を選ぶ」からMP4を選んでください',3000);return}
+    audioUnlock();
     if(v.paused){v.muted=false;v.play().then(()=>{lockWake();scheduleHide()}).catch(()=>toast('再生できませんでした',3000))}else v.pause();
   });
   v.addEventListener('play',()=>setIcon(true));v.addEventListener('pause',()=>setIcon(false));
