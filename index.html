@@ -53,6 +53,9 @@ body{font-family:var(--font-ui);-webkit-user-select:none;user-select:none}
 .btn.on{border-color:var(--accent);color:var(--accent)}
 .btn:focus-visible,.seg button:focus-visible,.play:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 
+#ui.compact .panel{display:none}
+#quick{display:none;pointer-events:auto;align-self:center;margin-bottom:calc(env(safe-area-inset-bottom,0px) + 20px);font-size:16px;padding:12px 28px;border-radius:999px}
+#ui.compact #quick{display:block}
 .toast{align-self:center;pointer-events:none;background:var(--panel);border:1px solid var(--line);border-radius:12px;
   padding:8px 14px;font-size:13px;color:var(--fg);max-width:calc(100% - 32px);text-align:center;line-height:1.5}
 
@@ -98,15 +101,16 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border-radius:50%;bac
 <canvas id="stage" aria-label="左右の目用のVR映像"></canvas>
 <video id="vid" playsinline webkit-playsinline preload="auto"></video>
 
-<div id="ui">
+<div id="ui" class="compact">
   <header class="top">
-    <div class="brand">ゴーグル3Dプレーヤー <span style="font-size:11px;color:var(--muted);font-weight:500">ver 2.0</span><small id="fname">デモ映像を表示中</small></div>
+    <div class="brand">ゴーグル3Dプレーヤー <span style="font-size:11px;color:var(--muted);font-weight:500">ver 2.1</span><small id="fname">デモ映像を表示中</small></div>
     <label class="btn primary" for="file">動画を選ぶ</label>
     <input class="vh" type="file" id="file" accept="video/mp4,.mp4,.m4v,.mov,video/*" multiple>
   </header>
 
   <div class="toast" id="toast">iPhoneを横向きにして、画面をドラッグすると見回せます</div>
 
+  <button class="btn primary" id="quick">VRで見る</button>
   <section class="panel" aria-label="操作">
     <div class="transport">
       <button class="play" id="play" aria-label="再生"><svg viewBox="0 0 24 24" id="playIcon"><path d="M7 4l13 8-13 8z"/></svg></button>
@@ -163,7 +167,7 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border-radius:50%;bac
 
   let toastTimer=null;
   function toast(msg,ms){const t=$('toast');t.textContent=msg;t.hidden=false;clearTimeout(toastTimer);if(ms)toastTimer=setTimeout(()=>t.hidden=true,ms)}
-  toast('iPhoneを横向きにして、画面をドラッグすると見回せます',6000);
+  toast('動画を選んで「VRで見る」。画面をタップすると設定が出ます',5000);
 
   // ---------- WebGL ----------
   const gl=cv.getContext('webgl',{antialias:false,alpha:false});
@@ -274,6 +278,7 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border-radius:50%;bac
     if(gyroOn){gyroOn=false;removeEventListener('deviceorientation',onOrient);$('gyro').classList.remove('on');$('gyro').textContent='頭の動きで見回す';return}
     startGyro();
   });
+  $('quick').addEventListener('click',()=>$('vr').click());
   $('vr').addEventListener('click',async()=>{
     audioUnlock();
     if(hasVideo&&v.paused){v.muted=false;v.play().then(lockWake).catch(()=>{})}
@@ -290,7 +295,7 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border-radius:50%;bac
     const k=(S.fov*Math.PI/180)/innerHeight;
     if(gyroOn)yawOffset+=dx*k;else{yaw+=dx*k;pitch=Math.max(-1.45,Math.min(1.45,pitch+dy*k))}
   });
-  const endDrag=()=>{if(drag&&!drag.moved)showUI(ui.classList.contains('off'));drag=null};
+  const endDrag=()=>{if(drag&&!drag.moved){if(ui.classList.contains('compact')){ui.classList.remove('compact');showUI(true)}else showUI(ui.classList.contains('off'))}drag=null};
   cv.addEventListener('pointerup',endDrag);cv.addEventListener('pointercancel',()=>drag=null);
 
   // ---------- UI ----------
