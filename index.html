@@ -103,7 +103,7 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border-radius:50%;bac
 
 <div id="ui" class="compact">
   <header class="top">
-    <div class="brand">ゴーグル3Dプレーヤー <span style="font-size:11px;color:var(--muted);font-weight:500">ver 3.10</span><small id="fname">デモ映像を表示中</small></div>
+    <div class="brand">ゴーグル3Dプレーヤー <span style="font-size:11px;color:var(--muted);font-weight:500">ver 3.11</span><small id="fname">デモ映像を表示中</small></div>
     <label class="btn primary" for="file">動画を選ぶ</label>
     <input class="vh" type="file" id="file" accept="video/mp4,.mp4,.m4v,.mov,video/*" multiple>
   </header>
@@ -144,6 +144,7 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border-radius:50%;bac
       <div class="sl"><span class="label">レンズ補正</span><input type="range" id="lens" min="0" max="100" value="40"><span class="val" id="lensV">40</span></div>
       <div class="sl"><span class="label">縦の比率</span><input type="range" id="vs" min="80" max="120" value="100"><button class="val" id="vsV" title="タップで100に戻す" style="font:inherit;font-family:var(--font-num);font-size:12px;background:none;border:1px solid var(--line);border-radius:8px;color:var(--fg);padding:4px 6px;cursor:pointer">100</button></div>
       <div class="sl"><span class="label">くっきり</span><input type="range" id="sharp" min="0" max="100" value="35"><span class="val" id="sharpV">35</span></div>
+      <div class="sl"><span class="label">傾き補正</span><input type="range" id="roll" min="0" max="100" value="100"><span class="val" id="rollV">100</span></div>
     </div>
 
     <div class="row">
@@ -172,7 +173,7 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border-radius:50%;bac
 (function(){
   const $=id=>document.getElementById(id);
   const cv=$('stage'), v=$('vid'), ui=$('ui');
-  const S={proj:'eq180',lay:'sbs',fov:100,ipd:0,swap:false,divider:true,loop:false,waudio:true,vol:1,cloudUrl:'',cloudKey:'',lens:40,vs:100,sharp:35};
+  const S={proj:'eq180',lay:'sbs',fov:100,ipd:0,swap:false,divider:true,loop:false,waudio:true,vol:1,cloudUrl:'',cloudKey:'',lens:40,vs:100,sharp:35,roll:100};
   try{Object.assign(S,JSON.parse(localStorage.getItem('goggle3d.v2')||'{}'))}catch(e){}
   const save=()=>{try{localStorage.setItem('goggle3d.v2',JSON.stringify(S))}catch(e){}};
 
@@ -267,8 +268,17 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border-radius:50%;bac
     gq=q;
   }
   function headingOf(m){return Math.atan2(-m[6],-m[8])} // yaw of forward vector
+  // remove (part of) the head tilt so both eyes stay level with the stereo video
+  function levelRoll(R,k){
+    if(k<=0)return R;
+    const f=[-R[6],-R[7],-R[8]],pt=Math.asin(Math.max(-1,Math.min(1,f[1]))),yw=Math.atan2(-f[0],-f[2]);
+    const N=matYawPitch(yw,pt),rN=[N[0],N[1],N[2]],uN=[N[3],N[4],N[5]],uR=[R[3],R[4],R[5]];
+    const a=uR[0]*rN[0]+uR[1]*rN[1]+uR[2]*rN[2], b=uR[0]*uN[0]+uR[1]*uN[1]+uR[2]*uN[2];
+    const ps=(1-k)*Math.atan2(a,b),c=Math.cos(ps),sn=Math.sin(ps);
+    return [c*rN[0]-sn*uN[0],c*rN[1]-sn*uN[1],c*rN[2]-sn*uN[2], c*uN[0]+sn*rN[0],c*uN[1]+sn*rN[1],c*uN[2]+sn*rN[2], R[6],R[7],R[8]];
+  }
   function currentRot(){
-    if(gyroOn&&gq){const g=qmat(gq);return mmul(matYawPitch(yawOffset,0),g)}
+    if(gyroOn&&gq){const g=qmat(gq);return levelRoll(mmul(matYawPitch(yawOffset,0),g),S.roll/100)}
     return matYawPitch(yaw,pitch);
   }
   $('center').addEventListener('click',()=>{
@@ -329,7 +339,8 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border-radius:50%;bac
   document.querySelectorAll('[data-lay]').forEach(b=>b.addEventListener('click',()=>{S.lay=b.dataset.lay;syncUI();save()}));
   $('fov').addEventListener('input',e=>{S.fov=+e.target.value;syncUI();save()});
   function syncLens(){$('lens').value=S.lens;$('lensV').textContent=S.lens;$('vs').value=S.vs;$('vsV').textContent=S.vs}
-  function syncSharp(){$('sharp').value=S.sharp;$('sharpV').textContent=S.sharp}
+  function syncSharp(){$('sharp').value=S.sharp;$('sharpV').textContent=S.sharp;$('roll').value=S.roll;$('rollV').textContent=S.roll}
+  $('roll').addEventListener('input',e=>{S.roll=+e.target.value;syncSharp();save()});
   syncSharp();$('sharp').addEventListener('input',e=>{S.sharp=+e.target.value;syncSharp();save()});
   $('vs').addEventListener('input',e=>{S.vs=+e.target.value;syncLens();save()});
   $('vsV').addEventListener('click',()=>{S.vs=100;syncLens();save()});
