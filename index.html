@@ -103,7 +103,7 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border-radius:50%;bac
 
 <div id="ui" class="compact">
   <header class="top">
-    <div class="brand">ゴーグル3Dプレーヤー <span style="font-size:11px;color:var(--muted);font-weight:500">ver 3.9</span><small id="fname">デモ映像を表示中</small></div>
+    <div class="brand">ゴーグル3Dプレーヤー <span style="font-size:11px;color:var(--muted);font-weight:500">ver 3.10</span><small id="fname">デモ映像を表示中</small></div>
     <label class="btn primary" for="file">動画を選ぶ</label>
     <input class="vh" type="file" id="file" accept="video/mp4,.mp4,.m4v,.mov,video/*" multiple>
   </header>
@@ -143,6 +143,7 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border-radius:50%;bac
       <div class="sl"><span class="label">目の間隔</span><input type="range" id="ipd" min="-60" max="60" value="0"><button class="val" id="ipdV" title="タップで0に戻す" style="font:inherit;font-family:var(--font-num);font-size:12px;background:none;border:1px solid var(--line);border-radius:8px;color:var(--fg);padding:4px 6px;cursor:pointer">0</button></div>
       <div class="sl"><span class="label">レンズ補正</span><input type="range" id="lens" min="0" max="100" value="40"><span class="val" id="lensV">40</span></div>
       <div class="sl"><span class="label">縦の比率</span><input type="range" id="vs" min="80" max="120" value="100"><button class="val" id="vsV" title="タップで100に戻す" style="font:inherit;font-family:var(--font-num);font-size:12px;background:none;border:1px solid var(--line);border-radius:8px;color:var(--fg);padding:4px 6px;cursor:pointer">100</button></div>
+      <div class="sl"><span class="label">くっきり</span><input type="range" id="sharp" min="0" max="100" value="35"><span class="val" id="sharpV">35</span></div>
     </div>
 
     <div class="row">
@@ -171,7 +172,7 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border-radius:50%;bac
 (function(){
   const $=id=>document.getElementById(id);
   const cv=$('stage'), v=$('vid'), ui=$('ui');
-  const S={proj:'eq180',lay:'sbs',fov:100,ipd:0,swap:false,divider:true,loop:false,waudio:true,vol:1,cloudUrl:'',cloudKey:'',lens:40,vs:100};
+  const S={proj:'eq180',lay:'sbs',fov:100,ipd:0,swap:false,divider:true,loop:false,waudio:true,vol:1,cloudUrl:'',cloudKey:'',lens:40,vs:100,sharp:35};
   try{Object.assign(S,JSON.parse(localStorage.getItem('goggle3d.v2')||'{}'))}catch(e){}
   const save=()=>{try{localStorage.setItem('goggle3d.v2',JSON.stringify(S))}catch(e){}};
 
@@ -186,9 +187,12 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border-radius:50%;bac
   const FS=`precision highp float;
   uniform sampler2D tex;uniform float ys;uniform vec2 res;uniform vec2 origin;uniform mat3 rot;uniform float tanHalf;
   uniform float eye;uniform int proj;uniform int lay;uniform float srcAspect;
+  uniform vec2 lc;uniform float lrad,k1,k2,cx0,cx1,cH,sharp;uniform vec2 texel;
   const float PI=3.14159265;
   void main(){
-    vec2 p=(gl_FragCoord.xy-origin)/res*2.0-1.0;
+    vec2 q=(gl_FragCoord.xy-lc)/lrad;float r2=dot(q,q);vec2 fc=lc+q*(1.0+k1*r2+k2*r2*r2)*lrad;
+    if(fc.x<cx0||fc.x>cx1||fc.y<0.0||fc.y>cH){gl_FragColor=vec4(0.,0.,0.,1.);return;}
+    vec2 p=(fc-origin)/res*2.0-1.0;
     float aspect=res.x/res.y;
     vec3 d=normalize(rot*vec3(p.x*tanHalf*aspect,p.y*tanHalf/ys,-1.0));
     vec2 uv=vec2(0.0);bool ok=true;
@@ -198,13 +202,17 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border-radius:50%;bac
     else{ok=d.z<-0.01;float t=-1.0/d.z;float W=1.8;float H=W/srcAspect;uv=vec2(d.x*t/W+0.5,d.y*t/H+0.5);ok=ok&&uv.x>=0.&&uv.x<=1.&&uv.y>=0.&&uv.y<=1.;}
     float u=uv.x,v=1.0-uv.y;
     if(lay==0){u=(clamp(u,0.001,0.999)+eye)*0.5;}else if(lay==1){v=(clamp(v,0.001,0.999)+eye)*0.5;}
-    gl_FragColor=ok?texture2D(tex,vec2(u,v)):vec4(0.,0.,0.,1.);
+    if(!ok){gl_FragColor=vec4(0.,0.,0.,1.);return;}
+    vec2 tc=vec2(u,v);vec4 c=texture2D(tex,tc);
+    if(sharp>0.0){vec4 n=texture2D(tex,tc+vec2(texel.x,0.))+texture2D(tex,tc-vec2(texel.x,0.))+texture2D(tex,tc+vec2(0.,texel.y))+texture2D(tex,tc-vec2(0.,texel.y));
+      c=clamp(c+sharp*(c-n*0.25),0.0,1.0);}
+    gl_FragColor=c;
   }`;
   function sh(type,src){const s=gl.createShader(type);gl.shaderSource(s,src);gl.compileShader(s);if(!gl.getShaderParameter(s,gl.COMPILE_STATUS))throw gl.getShaderInfoLog(s);return s}
   const prog=gl.createProgram();gl.attachShader(prog,sh(gl.VERTEX_SHADER,VS));gl.attachShader(prog,sh(gl.FRAGMENT_SHADER,FS));gl.linkProgram(prog);gl.useProgram(prog);
   const buf=gl.createBuffer();gl.bindBuffer(gl.ARRAY_BUFFER,buf);gl.bufferData(gl.ARRAY_BUFFER,new Float32Array([-1,-1,1,-1,-1,1,1,1]),gl.STATIC_DRAW);
   const ap=gl.getAttribLocation(prog,'p');gl.enableVertexAttribArray(ap);gl.vertexAttribPointer(ap,2,gl.FLOAT,false,0,0);
-  const U={};['tex','ys','res','origin','rot','tanHalf','eye','proj','lay','srcAspect'].forEach(n=>U[n]=gl.getUniformLocation(prog,n));
+  const U={};['tex','ys','res','origin','rot','tanHalf','eye','proj','lay','srcAspect','lc','lrad','k1','k2','cx0','cx1','cH','sharp','texel'].forEach(n=>U[n]=gl.getUniformLocation(prog,n));
   const tex=gl.createTexture();gl.bindTexture(gl.TEXTURE_2D,tex);
   gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,gl.LINEAR);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MAG_FILTER,gl.LINEAR);
   gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_S,gl.CLAMP_TO_EDGE);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_T,gl.CLAMP_TO_EDGE);
@@ -321,6 +329,8 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border-radius:50%;bac
   document.querySelectorAll('[data-lay]').forEach(b=>b.addEventListener('click',()=>{S.lay=b.dataset.lay;syncUI();save()}));
   $('fov').addEventListener('input',e=>{S.fov=+e.target.value;syncUI();save()});
   function syncLens(){$('lens').value=S.lens;$('lensV').textContent=S.lens;$('vs').value=S.vs;$('vsV').textContent=S.vs}
+  function syncSharp(){$('sharp').value=S.sharp;$('sharpV').textContent=S.sharp}
+  syncSharp();$('sharp').addEventListener('input',e=>{S.sharp=+e.target.value;syncSharp();save()});
   $('vs').addEventListener('input',e=>{S.vs=+e.target.value;syncLens();save()});
   $('vsV').addEventListener('click',()=>{S.vs=100;syncLens();save()});
   syncLens();$('lens').addEventListener('input',e=>{S.lens=+e.target.value;syncLens();save()});
@@ -782,7 +792,8 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border-radius:50%;bac
     drawHud(half,H);
     if(panelOpen&&(panelTick++%2===0)){drawPanel();gl.activeTexture(gl.TEXTURE1);gl.bindTexture(gl.TEXTURE_2D,ptex);px2.clearRect(0,0,2048,1024);px2.drawImage(pc,0,0,2048,1024);gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,gl.RGBA,gl.UNSIGNED_BYTE,pc2);gl.generateMipmap(gl.TEXTURE_2D);gl.activeTexture(gl.TEXTURE0)}
     const Rf=new Float32Array(R);
-    const useLens=S.lens>0;
+    const kk=S.lens/100, useLens=S.lens>0&&panelOpen, direct=S.lens>0&&!panelOpen;
+    const vw=hasVideo&&v.videoWidth?v.videoWidth:demo.width, vh=hasVideo&&v.videoHeight?v.videoHeight:demo.height;
     if(useLens){ensureFB(W,H);gl.bindFramebuffer(gl.FRAMEBUFFER,fb)}
     for(let e=0;e<2;e++){
       const x0=e*half,shift=(e===0?1:-1)*S.ipd*dpr;
@@ -793,6 +804,9 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border-radius:50%;bac
       gl.uniformMatrix3fv(U.rot,false,Rf);gl.uniform1f(U.tanHalf,tanHalf);gl.uniform1f(U.ys,S.vs/100);
       gl.uniform1i(U.proj,PROJ[S.proj]);gl.uniform1i(U.lay,LAY[S.lay]);gl.uniform1f(U.srcAspect,srcAspect());
       gl.uniform2f(U.res,half,H);gl.uniform2f(U.origin,x0+shift,0);gl.uniform1f(U.eye,S.swap?1-e:e);
+      gl.uniform2f(U.lc,x0+half/2,H/2);gl.uniform1f(U.lrad,Math.hypot(half/2,H/2));gl.uniform1f(U.k1,direct?kk*0.45:0);gl.uniform1f(U.k2,direct?kk*0.20:0);
+      gl.uniform1f(U.cx0,x0);gl.uniform1f(U.cx1,x0+half);gl.uniform1f(U.cH,H);
+      gl.uniform1f(U.sharp,S.sharp/100*1.5);gl.uniform2f(U.texel,1/vw,1/vh);
       gl.drawArrays(gl.TRIANGLE_STRIP,0,4);
       // 3D panel
       if(panelOpen){
