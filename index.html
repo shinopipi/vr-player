@@ -103,7 +103,7 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border-radius:50%;bac
 
 <div id="ui" class="compact">
   <header class="top">
-    <div class="brand">ゴーグル3Dプレーヤー <span style="font-size:11px;color:var(--muted);font-weight:500">ver 3.11</span><small id="fname">デモ映像を表示中</small></div>
+    <div class="brand">ゴーグル3Dプレーヤー <span style="font-size:11px;color:var(--muted);font-weight:500">ver 3.12</span><small id="fname">デモ映像を表示中</small></div>
     <label class="btn primary" for="file">動画を選ぶ</label>
     <input class="vh" type="file" id="file" accept="video/mp4,.mp4,.m4v,.mov,video/*" multiple>
   </header>
@@ -145,6 +145,7 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border-radius:50%;bac
       <div class="sl"><span class="label">縦の比率</span><input type="range" id="vs" min="80" max="120" value="100"><button class="val" id="vsV" title="タップで100に戻す" style="font:inherit;font-family:var(--font-num);font-size:12px;background:none;border:1px solid var(--line);border-radius:8px;color:var(--fg);padding:4px 6px;cursor:pointer">100</button></div>
       <div class="sl"><span class="label">くっきり</span><input type="range" id="sharp" min="0" max="100" value="35"><span class="val" id="sharpV">35</span></div>
       <div class="sl"><span class="label">傾き補正</span><input type="range" id="roll" min="0" max="100" value="100"><span class="val" id="rollV">100</span></div>
+      <div class="sl"><span class="label">水平調整</span><input type="range" id="tilt" min="-10" max="10" step="0.5" value="0"><button class="val" id="tiltV" title="タップで0に戻す" style="font:inherit;font-family:var(--font-num);font-size:12px;background:none;border:1px solid var(--line);border-radius:8px;color:var(--fg);padding:4px 6px;cursor:pointer">0°</button></div>
     </div>
 
     <div class="row">
@@ -173,7 +174,7 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border-radius:50%;bac
 (function(){
   const $=id=>document.getElementById(id);
   const cv=$('stage'), v=$('vid'), ui=$('ui');
-  const S={proj:'eq180',lay:'sbs',fov:100,ipd:0,swap:false,divider:true,loop:false,waudio:true,vol:1,cloudUrl:'',cloudKey:'',lens:40,vs:100,sharp:35,roll:100};
+  const S={proj:'eq180',lay:'sbs',fov:100,ipd:0,swap:false,divider:true,loop:false,waudio:true,vol:1,cloudUrl:'',cloudKey:'',lens:40,vs:100,sharp:35,roll:100,tilt:0,tiltBase:0};
   try{Object.assign(S,JSON.parse(localStorage.getItem('goggle3d.v2')||'{}'))}catch(e){}
   const save=()=>{try{localStorage.setItem('goggle3d.v2',JSON.stringify(S))}catch(e){}};
 
@@ -269,17 +270,24 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border-radius:50%;bac
   }
   function headingOf(m){return Math.atan2(-m[6],-m[8])} // yaw of forward vector
   // remove (part of) the head tilt so both eyes stay level with the stereo video
-  function levelRoll(R,k){
-    if(k<=0)return R;
+  function rollOf(R){
+    const f=[-R[6],-R[7],-R[8]],pt=Math.asin(Math.max(-1,Math.min(1,f[1]))),yw=Math.atan2(-f[0],-f[2]);
+    const N=matYawPitch(yw,pt),rN=[N[0],N[1],N[2]],uN=[N[3],N[4],N[5]],uR=[R[3],R[4],R[5]];
+    return Math.atan2(uR[0]*rN[0]+uR[1]*rN[1]+uR[2]*rN[2], uR[0]*uN[0]+uR[1]*uN[1]+uR[2]*uN[2]);
+  }
+  function levelRoll(R,k,extra){
+    extra=extra||0;
+    if(k<=0&&!extra)return R;
     const f=[-R[6],-R[7],-R[8]],pt=Math.asin(Math.max(-1,Math.min(1,f[1]))),yw=Math.atan2(-f[0],-f[2]);
     const N=matYawPitch(yw,pt),rN=[N[0],N[1],N[2]],uN=[N[3],N[4],N[5]],uR=[R[3],R[4],R[5]];
     const a=uR[0]*rN[0]+uR[1]*rN[1]+uR[2]*rN[2], b=uR[0]*uN[0]+uR[1]*uN[1]+uR[2]*uN[2];
-    const ps=(1-k)*Math.atan2(a,b),c=Math.cos(ps),sn=Math.sin(ps);
+    const ps=(1-k)*Math.atan2(a,b)+extra,c=Math.cos(ps),sn=Math.sin(ps);
     return [c*rN[0]-sn*uN[0],c*rN[1]-sn*uN[1],c*rN[2]-sn*uN[2], c*uN[0]+sn*rN[0],c*uN[1]+sn*rN[1],c*uN[2]+sn*rN[2], R[6],R[7],R[8]];
   }
   function currentRot(){
-    if(gyroOn&&gq){const g=qmat(gq);return levelRoll(mmul(matYawPitch(yawOffset,0),g),S.roll/100)}
-    return matYawPitch(yaw,pitch);
+    const trim=(S.tilt||0)*Math.PI/180;
+    if(gyroOn&&gq){const g=qmat(gq);const k=S.roll/100;return levelRoll(mmul(matYawPitch(yawOffset,0),g),k,k*(S.tiltBase||0)+trim)}
+    return trim?levelRoll(matYawPitch(yaw,pitch),0,trim):matYawPitch(yaw,pitch);
   }
   $('center').addEventListener('click',()=>{
     if(gyroOn&&gq){const g=qmat(gq);const f=[-g[6],-g[7],-g[8]];yawOffset=-Math.atan2(-f[0],-f[2])}
@@ -340,6 +348,9 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border-radius:50%;bac
   $('fov').addEventListener('input',e=>{S.fov=+e.target.value;syncUI();save()});
   function syncLens(){$('lens').value=S.lens;$('lensV').textContent=S.lens;$('vs').value=S.vs;$('vsV').textContent=S.vs}
   function syncSharp(){$('sharp').value=S.sharp;$('sharpV').textContent=S.sharp;$('roll').value=S.roll;$('rollV').textContent=S.roll}
+  function syncTilt(){$('tilt').value=S.tilt;$('tiltV').textContent=(S.tilt>0?'+':'')+S.tilt+'°'}
+  syncTilt();$('tilt').addEventListener('input',e=>{S.tilt=+e.target.value;syncTilt();save()});
+  $('tiltV').addEventListener('click',()=>{S.tilt=0;S.tiltBase=0;syncTilt();save();toast('水平を初期状態に戻しました',2000)});
   $('roll').addEventListener('input',e=>{S.roll=+e.target.value;syncSharp();save()});
   syncSharp();$('sharp').addEventListener('input',e=>{S.sharp=+e.target.value;syncSharp();save()});
   $('vs').addEventListener('input',e=>{S.vs=+e.target.value;syncLens();save()});
@@ -543,7 +554,8 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border-radius:50%;bac
   function flash(m){flashMsg=m;flashT=1.6}
   function basis(){const n=dirOf(pYaw,pPitch),r=[Math.cos(pYaw),0,-Math.sin(pYaw)],u=cross(r,n);return{n,r,u,c:[n[0]*PD,n[1]*PD,n[2]*PD]}}
   function recenter(){
-    if(gyroOn&&gq){const g=qmat(gq);const f=[-g[6],-g[7],-g[8]];yawOffset=-Math.atan2(-f[0],-f[2])}
+    if(gyroOn&&gq){const g=qmat(gq);const f=[-g[6],-g[7],-g[8]];yawOffset=-Math.atan2(-f[0],-f[2]);
+      const b=rollOf(mmul(matYawPitch(yawOffset,0),g));S.tiltBase=Math.abs(b)<0.35?b:0;save()}
     else{yaw=0;pitch=0}
   }
   const BY=420;
