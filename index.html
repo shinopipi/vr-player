@@ -103,7 +103,7 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border-radius:50%;bac
 
 <div id="ui" class="compact">
   <header class="top">
-    <div class="brand">ゴーグル3Dプレーヤー <span style="font-size:11px;color:var(--muted);font-weight:500">ver 3.12</span><small id="fname">デモ映像を表示中</small></div>
+    <div class="brand">ゴーグル3Dプレーヤー <span style="font-size:11px;color:var(--muted);font-weight:500">ver 3.13</span><small id="fname">デモ映像を表示中</small></div>
     <label class="btn primary" for="file">動画を選ぶ</label>
     <input class="vh" type="file" id="file" accept="video/mp4,.mp4,.m4v,.mov,video/*" multiple>
   </header>
@@ -289,10 +289,7 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border-radius:50%;bac
     if(gyroOn&&gq){const g=qmat(gq);const k=S.roll/100;return levelRoll(mmul(matYawPitch(yawOffset,0),g),k,k*(S.tiltBase||0)+trim)}
     return trim?levelRoll(matYawPitch(yaw,pitch),0,trim):matYawPitch(yaw,pitch);
   }
-  $('center').addEventListener('click',()=>{
-    if(gyroOn&&gq){const g=qmat(gq);const f=[-g[6],-g[7],-g[8]];yawOffset=-Math.atan2(-f[0],-f[2])}
-    else{yaw=0;pitch=0}
-  });
+  $('center').addEventListener('click',()=>{recenter();toast('正面と水平を合わせました',2000)});
 
   const NO_SENSOR='このページでは傾きセンサーが使えません。Safariで開いた版（https）でお使いください';
   function startGyro(){
@@ -565,6 +562,7 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border-radius:50%;bac
     {id:'vminus',cx:760,cy:100,r:32,cont:true},{id:'vplus',cx:1030,cy:100,r:32,cont:true},
     {id:'close',cx:1140,cy:100,r:36},
     {id:'zbar',x:100,y:70,w:190,h:60,slide:true},{id:'ibar',x:450,y:70,w:190,h:60,slide:true},{id:'vbar',x:800,y:70,w:190,h:60,slide:true},
+    {id:'tminus',cx:440,cy:614,r:28,cont:true},{id:'tplus',cx:760,cy:614,r:28,cont:true},{id:'tbar',x:490,y:588,w:220,h:52,slide:true},
     {id:'seek',x:60,y:215,w:1080,h:70},
     {id:'recenter',cx:140,cy:BY,r:56},{id:'back',cx:320,cy:BY,r:56},{id:'play',cx:500,cy:BY,r:72},
     {id:'fwd',cx:680,cy:BY,r:56},{id:'swap',cx:860,cy:BY,r:56},{id:'list',cx:1040,cy:BY,r:56}];
@@ -617,6 +615,9 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border-radius:50%;bac
       case'zplus':S.fov=Math.max(60,S.fov-2);break;
       case'iminus':S.ipd=Math.max(-60,S.ipd-1);break;
       case'iplus':S.ipd=Math.min(60,S.ipd+1);break;
+      case'tminus':S.tilt=Math.max(-10,Math.round((S.tilt-0.5)*2)/2);if(typeof syncTilt==='function')syncTilt();break;
+      case'tplus':S.tilt=Math.min(10,Math.round((S.tilt+0.5)*2)/2);if(typeof syncTilt==='function')syncTilt();break;
+      case'tbar':{let t=Math.round((seekFrac*20-10)*2)/2;if(Math.abs(t)<=0.5)t=0;S.tilt=t;if(typeof syncTilt==='function')syncTilt();break}
       case'zbar':S.fov=Math.round(130-seekFrac*70);break;
       case'ibar':{const n=Math.round(seekFrac*120-60);S.ipd=Math.abs(n)<=6?0:n;break}
       case'vbar':S.vol=Math.round(seekFrac*20)/20;applyVol();break;
@@ -656,6 +657,7 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border-radius:50%;bac
   function rr(c,x,y,w,h,r){c.beginPath();c.moveTo(x+r,y);c.arcTo(x+w,y,x+w,y+h,r);c.arcTo(x+w,y+h,x,y+h,r);c.arcTo(x,y+h,x,y,r);c.arcTo(x,y,x+w,y,r);c.closePath()}
   function ring(c,x,y,r,f){c.strokeStyle=ACC;c.lineWidth=7;c.beginPath();c.arc(x,y,r,-Math.PI/2,-Math.PI/2+clamp01(f)*Math.PI*2);c.stroke()}
   function icon(c,id,x,y,r){
+    if(id==='tminus')id='iminus';else if(id==='tplus')id='iplus';
     c.save();c.translate(x,y);c.strokeStyle=FG;c.fillStyle=FG;c.lineWidth=Math.max(3,r*0.09);c.lineCap='round';c.lineJoin='round';
     const ln=(a,b,d,e)=>{c.beginPath();c.moveTo(a,b);c.lineTo(d,e);c.stroke()};
     const tri=(dx,dir,s)=>{c.beginPath();c.moveTo(dx-dir*s,-s*1.2);c.lineTo(dx+dir*s,0);c.lineTo(dx-dir*s,s*1.2);c.closePath();c.fill()};
@@ -720,6 +722,12 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border-radius:50%;bac
     c.fillStyle=MUTED;c.font=`500 24px ${JP}`;c.textAlign='center';
     c.fillText('ズーム',195,52);c.fillText('目の間隔 '+(S.ipd>0?'+':'')+S.ipd,545,52);c.fillText('音量 '+Math.round(S.vol*100),895,52);
     bar(105,285,(130-S.fov)/70);bar(455,635,(S.ipd+60)/120);bar(805,985,S.vol);
+    {const l=500,r_=700,y=614,f=(S.tilt+10)/20;
+     rr(c,l,y-6,r_-l,12,6);c.fillStyle=TRACK;c.fill();c.fillStyle='rgba(255,255,255,0.35)';c.fillRect((l+r_)/2-1,y-14,2,28);
+     c.beginPath();c.arc(l+(r_-l)*clamp01(f),y,13,0,Math.PI*2);c.fillStyle=ACC;c.fill();
+     c.fillStyle=MUTED;c.font=`500 24px ${JP}`;c.textAlign='center';if(hoverId!=='tbar')c.fillText('水平 '+(S.tilt>0?'+':'')+S.tilt+'°',600,576);
+     if(hoverId==='tbar'){const x=l+(r_-l)*seekFrac;c.fillStyle=ACC;c.fillRect(x-3,y-20,6,40);ring(c,x,y,26,hoverT/DWELL);
+       let t=Math.round((seekFrac*20-10)*2)/2;if(Math.abs(t)<=0.5)t=0;c.fillStyle=FG;c.font=`700 24px ${JP}`;c.fillText('水平 '+(t>0?'+':'')+t+'°',600,576)}}
     {const sb={zbar:[105,285],ibar:[455,635],vbar:[805,985]}[hoverId];
      if(sb){const x=sb[0]+(sb[1]-sb[0])*seekFrac;c.fillStyle=ACC;c.fillRect(x-3,80,6,40);ring(c,x,100,26,hoverT/DWELL);
        const val=hoverId==='zbar'?Math.round(130-seekFrac*70)+'°':hoverId==='ibar'?((n=>(n>0?'+':'')+n)(Math.round(seekFrac*120-60))):String(Math.round(seekFrac*20)*5);
@@ -749,7 +757,7 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border-radius:50%;bac
     }
     // hint & flash
     c.textAlign='center';c.font=`500 22px ${JP}`;c.fillStyle=MUTED;
-    c.fillText(flashT>0?flashMsg:'項目を1.5秒見つめると決定 ・ パネルの外を1.5秒見ると閉じます',CW/2,650);
+    c.fillText(flashT>0?flashMsg:'項目を1.5秒見つめると決定 ・ パネルの外を1.5秒見ると閉じます',CW/2,688);
     // gaze cursor
     if(gazeUV){c.beginPath();c.arc(gazeUV[0],gazeUV[1],9,0,Math.PI*2);c.fillStyle='#fff';c.fill();c.lineWidth=3;c.strokeStyle='rgba(0,0,0,.6)';c.stroke()}
   }
