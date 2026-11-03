@@ -103,7 +103,7 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border-radius:50%;bac
 
 <div id="ui" class="compact">
   <header class="top">
-    <div class="brand">ゴーグル3Dプレーヤー <span style="font-size:11px;color:var(--muted);font-weight:500">ver 3.17</span><small id="fname">デモ映像を表示中</small></div>
+    <div class="brand">ゴーグル3Dプレーヤー <span style="font-size:11px;color:var(--muted);font-weight:500">ver 3.18</span><small id="fname">デモ映像を表示中</small></div>
     <label class="btn primary" for="file">動画を選ぶ</label>
     <input class="vh" type="file" id="file" accept="video/mp4,.mp4,.m4v,.mov,video/*" multiple>
   </header>
@@ -508,7 +508,7 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border-radius:50%;bac
     if(ok)loadCloud(false);
   });
   // auto-update: when a newer version is on the server, reload once (the ?v= makes Safari skip its old copy)
-  const MY_VER='3.17';
+  const MY_VER='3.18';
   async function checkUpdate(){
     if(!/github\.io$/.test(location.hostname)||hasVideo&&!v.paused)return;
     try{
@@ -880,10 +880,11 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border-radius:50%;bac
     // step text + "look down" progress, head-locked, in both eyes
     dt=dt||1/60;calibT+=dt;
     const f=[-R[6],-R[7],-R[8]],pt=Math.asin(Math.max(-1,Math.min(1,f[1]))),gy=Math.atan2(-f[0],-f[2]);
-    if(calYaw===null)calYaw=gy;
+    // wait 1.5s for the head to settle, then use that direction as the "no change" point
+    if(calibT<1.5){calYaw=gy}
     let dy=gy-calYaw;dy=Math.atan2(Math.sin(dy),Math.cos(dy));
     let turning=0;
-    if(Math.abs(pt)<25*D2R&&Math.abs(dy)>7*D2R){turning=dy>0?1:-1;const sp=Math.min(1,(Math.abs(dy)-7*D2R)/(15*D2R));S.ipd=Math.max(-60,Math.min(60,S.ipd+turning*(3+sp*12)*dt))}
+    if(calibT>=1.5&&Math.abs(pt)<25*D2R&&Math.abs(dy)>7*D2R&&Math.abs(dy)<35*D2R){turning=dy>0?1:-1;const sp=Math.min(1,(Math.abs(dy)-7*D2R)/(15*D2R));S.ipd=Math.max(-30,Math.min(30,S.ipd+turning*(2+sp*6)*dt))}
     if(pt<-35*D2R){downT+=dt;if(downT>=2){endCalib();return}}else downT=0;
     const step=turning?1:Math.min(2,Math.floor(calibT/6));let s_=Math.min(half,H)/30;
     for(let e=0;e<2;e++){
