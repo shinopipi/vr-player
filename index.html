@@ -103,7 +103,7 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border-radius:50%;bac
 
 <div id="ui" class="compact">
   <header class="top">
-    <div class="brand">ゴーグル3Dプレーヤー <span style="font-size:11px;color:var(--muted);font-weight:500">ver 3.15</span><small id="fname">デモ映像を表示中</small></div>
+    <div class="brand">ゴーグル3Dプレーヤー <span style="font-size:11px;color:var(--muted);font-weight:500">ver 3.16</span><small id="fname">デモ映像を表示中</small></div>
     <label class="btn primary" for="file">動画を選ぶ</label>
     <input class="vh" type="file" id="file" accept="video/mp4,.mp4,.m4v,.mov,video/*" multiple>
   </header>
@@ -156,6 +156,8 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border-radius:50%;bac
       <label class="chip"><input type="checkbox" id="divider" checked><span>仕切り線</span></label>
       <label class="chip"><input type="checkbox" id="loop"><span>リピート</span></label>
       <label class="chip"><input type="checkbox" id="waudio"><span>再生中表示を抑える</span></label>
+      <button class="btn" id="calibBtn">ピント調整</button>
+      <label class="chip"><input type="checkbox" id="calibOn"><span>VR開始時にピント調整</span></label>
       <button class="btn" id="fs">全画面</button>
       <button class="btn" id="hide">操作を隠す</button>
     </div>
@@ -175,7 +177,7 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border-radius:50%;bac
 (function(){
   const $=id=>document.getElementById(id);
   const cv=$('stage'), v=$('vid'), ui=$('ui');
-  const S={proj:'eq180',lay:'sbs',fov:100,ipd:0,swap:false,divider:true,loop:false,waudio:true,vol:1,cloudUrl:'',cloudKey:'',lens:40,vs:100,sharp:35,roll:100,tilt:0,tiltBase:0,bright:100};
+  const S={proj:'eq180',lay:'sbs',fov:100,ipd:0,swap:false,divider:true,loop:false,waudio:true,vol:1,cloudUrl:'',cloudKey:'',lens:40,vs:100,sharp:35,roll:100,tilt:0,tiltBase:0,bright:100,calibOnStart:true};
   try{Object.assign(S,JSON.parse(localStorage.getItem('goggle3d.v2')||'{}'))}catch(e){}
   const save=()=>{try{localStorage.setItem('goggle3d.v2',JSON.stringify(S))}catch(e){}};
 
@@ -315,8 +317,10 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border-radius:50%;bac
   $('quick').addEventListener('click',()=>$('vr').click());
   $('vr').addEventListener('click',async()=>{
     audioUnlock();
-    if(hasVideo&&v.paused){v.muted=false;v.play().then(lockWake).catch(()=>{})}
+    const wantCalib=S.calibOnStart;
+    if(!wantCalib&&hasVideo&&v.paused){v.muted=false;v.play().then(lockWake).catch(()=>{})}
     const ok=await startGyro();
+    if(wantCalib){startCalib(true);showUI(false);return}
     if(ok){toast('正面を向いた状態で始まります。見失ったら画面をタップ→「正面に戻す」',4000);setTimeout(()=>showUI(false),1200)}
   });
 
@@ -504,7 +508,7 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border-radius:50%;bac
     if(ok)loadCloud(false);
   });
   // auto-update: when a newer version is on the server, reload once (the ?v= makes Safari skip its old copy)
-  const MY_VER='3.15';
+  const MY_VER='3.16';
   async function checkUpdate(){
     if(!/github\.io$/.test(location.hostname)||hasVideo&&!v.paused)return;
     try{
@@ -648,6 +652,7 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border-radius:50%;bac
   }
   function updateGaze(dt,R){
     if(flashT>0)flashT-=dt;
+    if(calib){upT=0;return}
     const g=[-R[6],-R[7],-R[8]],gp=Math.asin(Math.max(-1,Math.min(1,g[1]))),gy=Math.atan2(-g[0],-g[2]);
     if(!panelOpen){
       gazeUV=null;panelView='main';
@@ -823,6 +828,62 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border-radius:50%;bac
   gl.activeTexture(gl.TEXTURE0);gl.bindTexture(gl.TEXTURE_2D,tex);
   gl.blendFunc(gl.SRC_ALPHA,gl.ONE_MINUS_SRC_ALPHA);
 
+  // ---------- focus check screen (for the goggle dials) ----------
+  let calib=false,calibPlay=false,calibT=0,downT=0;
+  const calCv=document.createElement('canvas');calCv.width=2048;calCv.height=1024;
+  (function drawCalib(){
+    const c=calCv.getContext('2d'),E=1024,JPF='"Hiragino Sans","Hiragino Kaku Gothic ProN",sans-serif';
+    for(let e=0;e<2;e++){
+      const x0=e*E,cx=x0+E/2,cy=E/2;
+      c.fillStyle='#000';c.fillRect(x0,0,E,E);
+      c.strokeStyle='#fff';c.lineCap='round';
+      // concentric rings
+      for(let r=40;r<=240;r+=40){c.lineWidth=r%80?2:4;c.beginPath();c.arc(cx,cy,r,0,Math.PI*2);c.stroke()}
+      // center cross (same in both eyes -> must merge into one)
+      c.lineWidth=5;c.beginPath();c.moveTo(cx-60,cy);c.lineTo(cx+60,cy);c.moveTo(cx,cy-60);c.lineTo(cx,cy+60);c.stroke();
+      c.fillStyle='#ff5a5a';c.beginPath();c.arc(cx,cy,8,0,Math.PI*2);c.fill();
+      // fine stripes in 4 corners (sharpness)
+      const patch=(px,py,vert)=>{c.fillStyle='#fff';for(let k=0;k<12;k++){vert?c.fillRect(px+k*10,py,4,110):c.fillRect(px,py+k*10,110,4)}};
+      patch(x0+120,300,true);patch(x0+E-230,300,false);patch(x0+120,E-260,false);patch(x0+E-230,E-260,true);
+      // eye label (only this eye sees it)
+      c.fillStyle=e===0?'#7cc7ff':'#ffb36b';c.font=`700 44px ${JPF}`;c.textAlign='center';c.textBaseline='middle';
+      c.fillText(e===0?'左目 L':'右目 R',e===0?x0+150:x0+E-150,cy);
+      // title + text in decreasing sizes
+      c.fillStyle='#fff';c.font=`700 48px ${JPF}`;c.fillText('ピント調整',cx,60);
+      [[34,118],[26,160],[20,194],[15,222]].forEach(([sz,y])=>{c.font=`500 ${sz}px ${JPF}`;c.fillStyle='#e8edf2';c.fillText('いちばん小さい文字まで読めるように',cx,y)});
+    }
+  })();
+  const calTex=gl.createTexture();gl.activeTexture(gl.TEXTURE3);gl.bindTexture(gl.TEXTURE_2D,calTex);
+  gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,gl.LINEAR_MIPMAP_LINEAR);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MAG_FILTER,gl.LINEAR);
+  gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_S,gl.CLAMP_TO_EDGE);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_T,gl.CLAMP_TO_EDGE);
+  gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,gl.RGBA,gl.UNSIGNED_BYTE,calCv);gl.generateMipmap(gl.TEXTURE_2D);
+  gl.activeTexture(gl.TEXTURE0);gl.bindTexture(gl.TEXTURE_2D,tex);
+  const CAL_STEPS=['① 片目ずつ：ピントのダイヤルで文字をくっきり','② 両目で：目の幅のダイヤルで十字を1つに','③ 下を向いて2秒で開始（タップでもOK）'];
+  function startCalib(thenPlay){calib=true;calibPlay=!!thenPlay;calibT=0;downT=0;if(hasVideo&&!v.paused)v.pause()}
+  function endCalib(){
+    if(!calib)return;calib=false;downT=0;recenter();
+    if(calibPlay&&hasVideo){audioUnlock();v.muted=false;v.play().then(lockWake).catch(()=>{})}
+    flash('ピント調整を終了しました');
+  }
+  $('calibBtn').addEventListener('click',()=>{startCalib(false);showUI(false)});
+  $('calibOn').checked=S.calibOnStart;$('calibOn').addEventListener('change',e=>{S.calibOnStart=e.target.checked;save()});
+  cv.addEventListener('pointerup',()=>{if(calib)setTimeout(endCalib,0)},true);
+  function calibHud(half,H,R){
+    // step text + "look down" progress, head-locked, in both eyes
+    calibT+=1/60;
+    const f=[-R[6],-R[7],-R[8]],pt=Math.asin(Math.max(-1,Math.min(1,f[1])));
+    if(gyroOn&&pt<-35*D2R){downT+=1/60;if(downT>=2){endCalib();return}}else downT=0;
+    const step=Math.min(2,Math.floor(calibT/6));let s_=Math.min(half,H)/30;
+    for(let e=0;e<2;e++){
+      const cx=e*half+half/2+(e===0?1:-1)*S.ipd*dpr;
+      hx.save();hx.beginPath();hx.rect(e*half,0,half,H);hx.clip();
+      hx.textAlign='center';hx.textBaseline='middle';hx.font=`700 ${Math.round(s_)}px ${JP}`;
+      {const w=Math.max(...CAL_STEPS.map(t=>hx.measureText(t).width));if(w>half*0.86){s_*=half*0.86/w;hx.font=`700 ${Math.round(s_)}px ${JP}`}}
+      CAL_STEPS.forEach((t,i)=>{hx.fillStyle=i===step?'#ffffff':'rgba(255,255,255,0.45)';hx.fillText(t,cx,H*0.82+i*s_*1.55)});
+      if(downT>0){hx.strokeStyle=ACC;hx.lineWidth=Math.max(3,s_*0.25);hx.beginPath();hx.arc(cx,H*0.5,s_*2.2,-Math.PI/2,-Math.PI/2+downT/2*Math.PI*2);hx.stroke()}
+      hx.restore();
+    }
+  }
   let lastTs=0,panelTick=0;
   // ---- lens distortion: draw the scene off-screen, then pre-warp each eye (barrel) so the goggle lens straightens it ----
   const VS3='attribute vec2 p;void main(){gl_Position=vec4(p,0.,1.);}';
@@ -852,6 +913,8 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border-radius:50%;bac
     if(hud.width!==W||hud.height!==H){hud.width=W;hud.height=H}
     updateGaze(dt,R);
     drawHud(half,H);
+    if(calib){calibHud(half,H,R);gl.activeTexture(gl.TEXTURE0);gl.bindTexture(gl.TEXTURE_2D,calTex)}
+    const ID=new Float32Array([1,0,0,0,1,0,0,0,1]);
     if(panelOpen&&(panelTick++%2===0)){drawPanel();gl.activeTexture(gl.TEXTURE1);gl.bindTexture(gl.TEXTURE_2D,ptex);px2.clearRect(0,0,2048,1024);px2.drawImage(pc,0,0,2048,1024);gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,gl.RGBA,gl.UNSIGNED_BYTE,pc2);gl.generateMipmap(gl.TEXTURE_2D);gl.activeTexture(gl.TEXTURE0)}
     const Rf=new Float32Array(R);
     const kk=S.lens/100, useLens=S.lens>0&&panelOpen, direct=S.lens>0&&!panelOpen;
@@ -863,12 +926,12 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border-radius:50%;bac
       // video sphere
       gl.useProgram(prog);gl.bindBuffer(gl.ARRAY_BUFFER,buf);gl.vertexAttribPointer(ap,2,gl.FLOAT,false,0,0);
       gl.viewport(x0,0,half,H);
-      gl.uniformMatrix3fv(U.rot,false,Rf);gl.uniform1f(U.tanHalf,tanHalf);gl.uniform1f(U.ys,S.vs/100);
-      gl.uniform1i(U.proj,PROJ[S.proj]);gl.uniform1i(U.lay,LAY[S.lay]);gl.uniform1f(U.srcAspect,srcAspect());
-      gl.uniform2f(U.res,half,H);gl.uniform2f(U.origin,x0+shift,0);gl.uniform1f(U.eye,S.swap?1-e:e);
+      gl.uniformMatrix3fv(U.rot,false,calib?ID:Rf);gl.uniform1f(U.tanHalf,tanHalf);gl.uniform1f(U.ys,S.vs/100);
+      gl.uniform1i(U.proj,calib?3:PROJ[S.proj]);gl.uniform1i(U.lay,calib?0:LAY[S.lay]);gl.uniform1f(U.srcAspect,calib?1:srcAspect());
+      gl.uniform2f(U.res,half,H);gl.uniform2f(U.origin,x0+shift,0);gl.uniform1f(U.eye,calib?e:(S.swap?1-e:e));
       gl.uniform2f(U.lc,x0+half/2,H/2);gl.uniform1f(U.lrad,Math.hypot(half/2,H/2));gl.uniform1f(U.k1,direct?kk*0.45:0);gl.uniform1f(U.k2,direct?kk*0.20:0);
       gl.uniform1f(U.cx0,x0);gl.uniform1f(U.cx1,x0+half);gl.uniform1f(U.cH,H);
-      gl.uniform1f(U.sharp,S.sharp/100*1.5);gl.uniform1f(U.bright,(S.bright||100)/100);gl.uniform2f(U.texel,1/vw,1/vh);
+      gl.uniform1f(U.sharp,calib?0:S.sharp/100*1.5);gl.uniform1f(U.bright,calib?1:(S.bright||100)/100);gl.uniform2f(U.texel,1/vw,1/vh);
       gl.drawArrays(gl.TRIANGLE_STRIP,0,4);
       // 3D panel
       if(panelOpen){
