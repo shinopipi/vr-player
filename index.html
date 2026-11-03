@@ -103,7 +103,7 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border-radius:50%;bac
 
 <div id="ui" class="compact">
   <header class="top">
-    <div class="brand">ゴーグル3Dプレーヤー <span style="font-size:11px;color:var(--muted);font-weight:500">ver 3.13</span><small id="fname">デモ映像を表示中</small></div>
+    <div class="brand">ゴーグル3Dプレーヤー <span style="font-size:11px;color:var(--muted);font-weight:500">ver 3.14</span><small id="fname">デモ映像を表示中</small></div>
     <label class="btn primary" for="file">動画を選ぶ</label>
     <input class="vh" type="file" id="file" accept="video/mp4,.mp4,.m4v,.mov,video/*" multiple>
   </header>
@@ -146,6 +146,7 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border-radius:50%;bac
       <div class="sl"><span class="label">くっきり</span><input type="range" id="sharp" min="0" max="100" value="35"><span class="val" id="sharpV">35</span></div>
       <div class="sl"><span class="label">傾き補正</span><input type="range" id="roll" min="0" max="100" value="100"><span class="val" id="rollV">100</span></div>
       <div class="sl"><span class="label">水平調整</span><input type="range" id="tilt" min="-10" max="10" step="0.5" value="0"><button class="val" id="tiltV" title="タップで0に戻す" style="font:inherit;font-family:var(--font-num);font-size:12px;background:none;border:1px solid var(--line);border-radius:8px;color:var(--fg);padding:4px 6px;cursor:pointer">0°</button></div>
+      <div class="sl"><span class="label">明るさ</span><input type="range" id="bright" min="50" max="150" step="5" value="100"><button class="val" id="brightV" title="タップで100に戻す" style="font:inherit;font-family:var(--font-num);font-size:12px;background:none;border:1px solid var(--line);border-radius:8px;color:var(--fg);padding:4px 6px;cursor:pointer">100%</button></div>
     </div>
 
     <div class="row">
@@ -174,7 +175,7 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border-radius:50%;bac
 (function(){
   const $=id=>document.getElementById(id);
   const cv=$('stage'), v=$('vid'), ui=$('ui');
-  const S={proj:'eq180',lay:'sbs',fov:100,ipd:0,swap:false,divider:true,loop:false,waudio:true,vol:1,cloudUrl:'',cloudKey:'',lens:40,vs:100,sharp:35,roll:100,tilt:0,tiltBase:0};
+  const S={proj:'eq180',lay:'sbs',fov:100,ipd:0,swap:false,divider:true,loop:false,waudio:true,vol:1,cloudUrl:'',cloudKey:'',lens:40,vs:100,sharp:35,roll:100,tilt:0,tiltBase:0,bright:100};
   try{Object.assign(S,JSON.parse(localStorage.getItem('goggle3d.v2')||'{}'))}catch(e){}
   const save=()=>{try{localStorage.setItem('goggle3d.v2',JSON.stringify(S))}catch(e){}};
 
@@ -189,7 +190,7 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border-radius:50%;bac
   const FS=`precision highp float;
   uniform sampler2D tex;uniform float ys;uniform vec2 res;uniform vec2 origin;uniform mat3 rot;uniform float tanHalf;
   uniform float eye;uniform int proj;uniform int lay;uniform float srcAspect;
-  uniform vec2 lc;uniform float lrad,k1,k2,cx0,cx1,cH,sharp;uniform vec2 texel;
+  uniform vec2 lc;uniform float lrad,k1,k2,cx0,cx1,cH,sharp,bright;uniform vec2 texel;
   const float PI=3.14159265;
   void main(){
     vec2 q=(gl_FragCoord.xy-lc)/lrad;float r2=dot(q,q);vec2 fc=lc+q*(1.0+k1*r2+k2*r2*r2)*lrad;
@@ -208,13 +209,13 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border-radius:50%;bac
     vec2 tc=vec2(u,v);vec4 c=texture2D(tex,tc);
     if(sharp>0.0){vec4 n=texture2D(tex,tc+vec2(texel.x,0.))+texture2D(tex,tc-vec2(texel.x,0.))+texture2D(tex,tc+vec2(0.,texel.y))+texture2D(tex,tc-vec2(0.,texel.y));
       c=clamp(c+sharp*(c-n*0.25),0.0,1.0);}
-    gl_FragColor=c;
+    gl_FragColor=vec4(clamp(c.rgb*bright,0.0,1.0),1.0);
   }`;
   function sh(type,src){const s=gl.createShader(type);gl.shaderSource(s,src);gl.compileShader(s);if(!gl.getShaderParameter(s,gl.COMPILE_STATUS))throw gl.getShaderInfoLog(s);return s}
   const prog=gl.createProgram();gl.attachShader(prog,sh(gl.VERTEX_SHADER,VS));gl.attachShader(prog,sh(gl.FRAGMENT_SHADER,FS));gl.linkProgram(prog);gl.useProgram(prog);
   const buf=gl.createBuffer();gl.bindBuffer(gl.ARRAY_BUFFER,buf);gl.bufferData(gl.ARRAY_BUFFER,new Float32Array([-1,-1,1,-1,-1,1,1,1]),gl.STATIC_DRAW);
   const ap=gl.getAttribLocation(prog,'p');gl.enableVertexAttribArray(ap);gl.vertexAttribPointer(ap,2,gl.FLOAT,false,0,0);
-  const U={};['tex','ys','res','origin','rot','tanHalf','eye','proj','lay','srcAspect','lc','lrad','k1','k2','cx0','cx1','cH','sharp','texel'].forEach(n=>U[n]=gl.getUniformLocation(prog,n));
+  const U={};['tex','ys','res','origin','rot','tanHalf','eye','proj','lay','srcAspect','lc','lrad','k1','k2','cx0','cx1','cH','sharp','texel','bright'].forEach(n=>U[n]=gl.getUniformLocation(prog,n));
   const tex=gl.createTexture();gl.bindTexture(gl.TEXTURE_2D,tex);
   gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,gl.LINEAR);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MAG_FILTER,gl.LINEAR);
   gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_S,gl.CLAMP_TO_EDGE);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_T,gl.CLAMP_TO_EDGE);
@@ -346,6 +347,9 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border-radius:50%;bac
   function syncLens(){$('lens').value=S.lens;$('lensV').textContent=S.lens;$('vs').value=S.vs;$('vsV').textContent=S.vs}
   function syncSharp(){$('sharp').value=S.sharp;$('sharpV').textContent=S.sharp;$('roll').value=S.roll;$('rollV').textContent=S.roll}
   function syncTilt(){$('tilt').value=S.tilt;$('tiltV').textContent=(S.tilt>0?'+':'')+S.tilt+'°'}
+  function syncBright(){$('bright').value=S.bright;$('brightV').textContent=S.bright+'%'}
+  syncBright();$('bright').addEventListener('input',e=>{S.bright=+e.target.value;syncBright();save()});
+  $('brightV').addEventListener('click',()=>{S.bright=100;syncBright();save()});
   syncTilt();$('tilt').addEventListener('input',e=>{S.tilt=+e.target.value;syncTilt();save()});
   $('tiltV').addEventListener('click',()=>{S.tilt=0;S.tiltBase=0;syncTilt();save();toast('水平を初期状態に戻しました',2000)});
   $('roll').addEventListener('input',e=>{S.roll=+e.target.value;syncSharp();save()});
@@ -562,7 +566,8 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border-radius:50%;bac
     {id:'vminus',cx:760,cy:100,r:32,cont:true},{id:'vplus',cx:1030,cy:100,r:32,cont:true},
     {id:'close',cx:1140,cy:100,r:36},
     {id:'zbar',x:100,y:70,w:190,h:60,slide:true},{id:'ibar',x:450,y:70,w:190,h:60,slide:true},{id:'vbar',x:800,y:70,w:190,h:60,slide:true},
-    {id:'tminus',cx:440,cy:614,r:28,cont:true},{id:'tplus',cx:760,cy:614,r:28,cont:true},{id:'tbar',x:490,y:588,w:220,h:52,slide:true},
+    {id:'tminus',cx:140,cy:614,r:28,cont:true},{id:'tplus',cx:440,cy:614,r:28,cont:true},{id:'tbar',x:180,y:588,w:220,h:52,slide:true},
+    {id:'bminus',cx:760,cy:614,r:28,cont:true},{id:'bplus',cx:1060,cy:614,r:28,cont:true},{id:'bbar',x:800,y:588,w:220,h:52,slide:true},
     {id:'seek',x:60,y:215,w:1080,h:70},
     {id:'recenter',cx:140,cy:BY,r:56},{id:'back',cx:320,cy:BY,r:56},{id:'play',cx:500,cy:BY,r:72},
     {id:'fwd',cx:680,cy:BY,r:56},{id:'swap',cx:860,cy:BY,r:56},{id:'list',cx:1040,cy:BY,r:56}];
@@ -617,6 +622,9 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border-radius:50%;bac
       case'iplus':S.ipd=Math.min(60,S.ipd+1);break;
       case'tminus':S.tilt=Math.max(-10,Math.round((S.tilt-0.5)*2)/2);if(typeof syncTilt==='function')syncTilt();break;
       case'tplus':S.tilt=Math.min(10,Math.round((S.tilt+0.5)*2)/2);if(typeof syncTilt==='function')syncTilt();break;
+      case'bminus':S.bright=Math.max(50,S.bright-5);if(typeof syncBright==='function')syncBright();break;
+      case'bplus':S.bright=Math.min(150,S.bright+5);if(typeof syncBright==='function')syncBright();break;
+      case'bbar':{let b=Math.round((50+seekFrac*100)/5)*5;if(Math.abs(b-100)<=5)b=100;S.bright=b;if(typeof syncBright==='function')syncBright();break}
       case'tbar':{let t=Math.round((seekFrac*20-10)*2)/2;if(Math.abs(t)<=0.5)t=0;S.tilt=t;if(typeof syncTilt==='function')syncTilt();break}
       case'zbar':S.fov=Math.round(130-seekFrac*70);break;
       case'ibar':{const n=Math.round(seekFrac*120-60);S.ipd=Math.abs(n)<=6?0:n;break}
@@ -658,6 +666,10 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border-radius:50%;bac
   function ring(c,x,y,r,f){c.strokeStyle=ACC;c.lineWidth=7;c.beginPath();c.arc(x,y,r,-Math.PI/2,-Math.PI/2+clamp01(f)*Math.PI*2);c.stroke()}
   function icon(c,id,x,y,r){
     if(id==='tminus')id='iminus';else if(id==='tplus')id='iplus';
+    if(id==='bminus'||id==='bplus'){c.save();c.translate(x,y);c.strokeStyle=FG;c.fillStyle=FG;c.lineWidth=Math.max(3,r*0.09);c.lineCap='round';
+      const big=id==='bplus',cr=r*(big?0.2:0.14);c.beginPath();c.arc(0,0,cr,0,Math.PI*2);c.fill();
+      for(let k=0;k<8;k++){const a=k*Math.PI/4,r1=cr+r*0.1,r2=cr+r*(big?0.3:0.2);c.beginPath();c.moveTo(Math.cos(a)*r1,Math.sin(a)*r1);c.lineTo(Math.cos(a)*r2,Math.sin(a)*r2);c.stroke()}
+      c.restore();return}
     c.save();c.translate(x,y);c.strokeStyle=FG;c.fillStyle=FG;c.lineWidth=Math.max(3,r*0.09);c.lineCap='round';c.lineJoin='round';
     const ln=(a,b,d,e)=>{c.beginPath();c.moveTo(a,b);c.lineTo(d,e);c.stroke()};
     const tri=(dx,dir,s)=>{c.beginPath();c.moveTo(dx-dir*s,-s*1.2);c.lineTo(dx+dir*s,0);c.lineTo(dx-dir*s,s*1.2);c.closePath();c.fill()};
@@ -722,12 +734,19 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border-radius:50%;bac
     c.fillStyle=MUTED;c.font=`500 24px ${JP}`;c.textAlign='center';
     c.fillText('ズーム',195,52);c.fillText('目の間隔 '+(S.ipd>0?'+':'')+S.ipd,545,52);c.fillText('音量 '+Math.round(S.vol*100),895,52);
     bar(105,285,(130-S.fov)/70);bar(455,635,(S.ipd+60)/120);bar(805,985,S.vol);
-    {const l=500,r_=700,y=614,f=(S.tilt+10)/20;
+    {const l=190,r_=390,y=614,f=(S.tilt+10)/20;
      rr(c,l,y-6,r_-l,12,6);c.fillStyle=TRACK;c.fill();c.fillStyle='rgba(255,255,255,0.35)';c.fillRect((l+r_)/2-1,y-14,2,28);
      c.beginPath();c.arc(l+(r_-l)*clamp01(f),y,13,0,Math.PI*2);c.fillStyle=ACC;c.fill();
-     c.fillStyle=MUTED;c.font=`500 24px ${JP}`;c.textAlign='center';if(hoverId!=='tbar')c.fillText('水平 '+(S.tilt>0?'+':'')+S.tilt+'°',600,576);
+     c.fillStyle=MUTED;c.font=`500 24px ${JP}`;c.textAlign='center';if(hoverId!=='tbar')c.fillText('水平 '+(S.tilt>0?'+':'')+S.tilt+'°',290,576);
      if(hoverId==='tbar'){const x=l+(r_-l)*seekFrac;c.fillStyle=ACC;c.fillRect(x-3,y-20,6,40);ring(c,x,y,26,hoverT/DWELL);
-       let t=Math.round((seekFrac*20-10)*2)/2;if(Math.abs(t)<=0.5)t=0;c.fillStyle=FG;c.font=`700 24px ${JP}`;c.fillText('水平 '+(t>0?'+':'')+t+'°',600,576)}}
+       let t=Math.round((seekFrac*20-10)*2)/2;if(Math.abs(t)<=0.5)t=0;c.fillStyle=FG;c.font=`700 24px ${JP}`;c.fillText('水平 '+(t>0?'+':'')+t+'°',290,576)}}
+    {const l=810,r_=1010,y=614,f=(S.bright-50)/100;
+     rr(c,l,y-6,r_-l,12,6);c.fillStyle=TRACK;c.fill();rr(c,l,y-6,(r_-l)*clamp01(f),12,6);c.fillStyle=ACC;c.fill();
+     c.beginPath();c.arc(l+(r_-l)*clamp01(f),y,13,0,Math.PI*2);c.fillStyle=FG;c.fill();
+     c.fillStyle=MUTED;c.font=`500 24px ${JP}`;c.textAlign='center';
+     if(hoverId==='bbar'){const x=l+(r_-l)*seekFrac;c.fillStyle=ACC;c.fillRect(x-3,y-20,6,40);ring(c,x,y,26,hoverT/DWELL);
+       let b=Math.round((50+seekFrac*100)/5)*5;if(Math.abs(b-100)<=5)b=100;c.fillStyle=FG;c.font=`700 24px ${JP}`;c.fillText('明るさ '+b+'%',910,576)}
+     else c.fillText('明るさ '+S.bright+'%',910,576)}
     {const sb={zbar:[105,285],ibar:[455,635],vbar:[805,985]}[hoverId];
      if(sb){const x=sb[0]+(sb[1]-sb[0])*seekFrac;c.fillStyle=ACC;c.fillRect(x-3,80,6,40);ring(c,x,100,26,hoverT/DWELL);
        const val=hoverId==='zbar'?Math.round(130-seekFrac*70)+'°':hoverId==='ibar'?((n=>(n>0?'+':'')+n)(Math.round(seekFrac*120-60))):String(Math.round(seekFrac*20)*5);
@@ -837,7 +856,7 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border-radius:50%;bac
       gl.uniform2f(U.res,half,H);gl.uniform2f(U.origin,x0+shift,0);gl.uniform1f(U.eye,S.swap?1-e:e);
       gl.uniform2f(U.lc,x0+half/2,H/2);gl.uniform1f(U.lrad,Math.hypot(half/2,H/2));gl.uniform1f(U.k1,direct?kk*0.45:0);gl.uniform1f(U.k2,direct?kk*0.20:0);
       gl.uniform1f(U.cx0,x0);gl.uniform1f(U.cx1,x0+half);gl.uniform1f(U.cH,H);
-      gl.uniform1f(U.sharp,S.sharp/100*1.5);gl.uniform2f(U.texel,1/vw,1/vh);
+      gl.uniform1f(U.sharp,S.sharp/100*1.5);gl.uniform1f(U.bright,(S.bright||100)/100);gl.uniform2f(U.texel,1/vw,1/vh);
       gl.drawArrays(gl.TRIANGLE_STRIP,0,4);
       // 3D panel
       if(panelOpen){
