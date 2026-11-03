@@ -103,7 +103,7 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border-radius:50%;bac
 
 <div id="ui" class="compact">
   <header class="top">
-    <div class="brand">ゴーグル3Dプレーヤー <span style="font-size:11px;color:var(--muted);font-weight:500">ver 3.14</span><small id="fname">デモ映像を表示中</small></div>
+    <div class="brand">ゴーグル3Dプレーヤー <span style="font-size:11px;color:var(--muted);font-weight:500">ver 3.15</span><small id="fname">デモ映像を表示中</small></div>
     <label class="btn primary" for="file">動画を選ぶ</label>
     <input class="vh" type="file" id="file" accept="video/mp4,.mp4,.m4v,.mov,video/*" multiple>
   </header>
@@ -503,6 +503,18 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border-radius:50%;bac
     toast(`${ok}本アップロードしました`,4000);
     if(ok)loadCloud(false);
   });
+  // auto-update: when a newer version is on the server, reload once (the ?v= makes Safari skip its old copy)
+  const MY_VER='3.15';
+  async function checkUpdate(){
+    if(!/github\.io$/.test(location.hostname)||hasVideo&&!v.paused)return;
+    try{
+      const r=await fetch(location.pathname+'?check='+Date.now(),{cache:'no-store'});if(!r.ok)return;
+      const m=/ver (\d+\.\d+)</.exec(await r.text());
+      if(m&&m[1]!==MY_VER){toast('新しいバージョン（ver '+m[1]+'）に更新します',2000);setTimeout(()=>location.replace(location.pathname+'?v='+m[1]),1200)}
+    }catch(e){}
+  }
+  setTimeout(checkUpdate,1500);
+  document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible')checkUpdate()});
   $('file').addEventListener('change',e=>{
     const fs=Array.from((e.target.files)||[]);if(!fs.length)return;
     lib.forEach(it=>{if(!it.remote&&!it.cloud)URL.revokeObjectURL(it.url)});
