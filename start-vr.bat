@@ -1,4 +1,10 @@
 @echo off
+rem ---- needs Administrator: re-launch itself elevated if not ----
+net session >nul 2>&1
+if %errorlevel% neq 0 (
+  powershell -NoProfile -Command "Start-Process -FilePath '%~f0' -Verb RunAs"
+  exit /b
+)
 setlocal
 rem ==== VR player: serve this folder and the video folder over Tailscale (https) ====
 set "TS=C:\Program Files\Tailscale\tailscale.exe"
